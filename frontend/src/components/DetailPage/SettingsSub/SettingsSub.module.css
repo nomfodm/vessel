@@ -1,0 +1,71 @@
+.sub {
+  flex: 1;
+  animation: slide-fade 0.22s ease both;
+}
+
+.section {
+  margin-bottom: 28px;
+}
+
+.label {
+  font-size: 12px;
+  color: var(--text-faint);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 6px;
+}
+
+.ramValue {
+  font-size: 22px;
+  font-weight: 900;
+  margin-bottom: 4px;
+}
+
+.ramAuto {
+  color: var(--text-dim);
+}
+
+.ramNum {
+  color: var(--text);
+}
+
+.ramTotal {
+  color: var(--text-faint);
+  font-size: 14px;
+}
+
+.sliderWrap {
+  width: 360px;
+  margin-top: 12px;
+}
+
+.sliderLabels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.sliderLabels span {
+  font-size: 10px;
+  color: var(--text-faint);
+  font-weight: 700;
+}
+
+.pathDisplay {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-border);
+  border-radius: 9px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  word-break: break-all;
+  max-width: 500px;
+}
+
+.pathActions {
+  display: flex;
+  gap: 8px;
+}
