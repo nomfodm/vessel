@@ -1,0 +1,118 @@
+.screen {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 5;
+}
+
+.glow {
+  position: absolute;
+  width: 500px;
+  height: 400px;
+  background: radial-gradient(ellipse, rgba(86, 37, 232, 0.18) 0%, transparent 70%);
+  filter: blur(40px);
+  pointer-events: none;
+}
+
+.panel {
+  width: 400px;
+  position: relative;
+  z-index: 2;
+  animation: page-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 32px;
+  gap: 12px;
+}
+
+.logoFloat {
+  animation: float 4s ease-in-out infinite;
+}
+
+.title {
+  text-align: center;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+}
+
+.grad {
+  background: var(--grad-text);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.subtitle {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-faint);
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  padding: 28px 28px 24px;
+  backdrop-filter: blur(30px);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  border-radius: 9px;
+  padding: 10px 14px;
+  color: #fca5a5;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.submitBtn {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.footer {
+  border-top: 1px solid var(--glass-border);
+  margin-top: 20px;
+  padding-top: 16px;
+  text-align: center;
+}
+
+.footerText {
+  font-size: 13px;
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
+.registerLink {
+  color: var(--cyan);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.version {
+  text-align: center;
+  margin-top: 16px;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-weight: 500;
+}
