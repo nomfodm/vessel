@@ -1,0 +1,60 @@
+.titlebar {
+  height: 36px;
+  background: rgba(255, 255, 255, 0.025);
+  border-bottom: 1px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  padding: 0 0 0 16px;
+  position: relative;
+  user-select: none;
+  flex-shrink: 0;
+  z-index: 10;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-faint);
+  letter-spacing: 0.4px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.controls {
+  margin-left: auto;
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.ctrl {
+  width: 46px;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  font-size: 16px;
+  font-family: var(--font);
+}
+
+.minimize:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.close:hover {
+  background: rgba(196, 43, 43, 0.85);
+  color: #fff;
+}
