@@ -1,0 +1,155 @@
+.page {
+  padding: 28px;
+  animation: page-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.sectionLabel {
+  font-size: 14px;
+  color: var(--text-faint);
+  font-weight: 700;
+  margin-bottom: 24px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  min-width: 0;
+}
+
+.left {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.titleRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.appTitle {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -0.3px;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.grad {
+  background: linear-gradient(90deg, #25c3e8, #a78bfa, #5625e8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.version {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.statusCol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.statusText {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.green {
+  color: #4ade80;
+  font-weight: 700;
+}
+
+.yellow {
+  color: #fbbf24;
+  font-weight: 700;
+}
+
+.red {
+  color: #f87171;
+  font-weight: 700;
+}
+
+.updateLink {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--cyan);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font);
+  padding: 0;
+  text-align: left;
+  text-decoration: underline;
+}
+
+.techTable {
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.techRow {
+  display: flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.techKey {
+  font-size: 13px;
+  color: var(--text-faint);
+  font-weight: 600;
+  flex-shrink: 0;
+  width: 110px;
+}
+
+.techVal {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.demoBtn {
+  margin-top: 28px;
+  font-size: 11px;
+  color: var(--text-faint);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-border);
+  border-radius: 7px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-family: var(--font);
+  font-weight: 600;
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+.floatLogo {
+  animation: float 4s ease-in-out infinite;
+}
