@@ -1,56 +1,54 @@
-import { useState, useEffect } from 'react'
-import {Events, WML} from "@wailsio/runtime";
-import {GreetService} from "../bindings/github.com/nomfodm/vessel";
+import { useState } from 'react'
+import { TitleBar } from './components/TitleBar/TitleBar'
+import { TopNav } from './components/TopNav/TopNav'
+import { StarCanvas } from './components/StarCanvas/StarCanvas'
+import { LoginScreen } from './components/LoginScreen/LoginScreen'
+import { PlayPage } from './components/PlayPage/PlayPage'
+import { DetailPage } from './components/DetailPage/DetailPage'
+import { InfoPage } from './components/InfoPage/InfoPage'
+import type { Tab, User, Profile } from './types'
+import styles from './App.module.css'
 
-function App() {
-  const [name, setName] = useState<string>('');
-  const [result, setResult] = useState<string>('Please enter your name below 👇');
-  const [time, setTime] = useState<string>('Listening for Time event...');
+export function App() {
+  const [user, setUser] = useState<User | null>(null)
+  const [tab, setTab] = useState<Tab>('play')
+  const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null)
 
-  const doGreet = () => {
-    let localName = name;
-    if (!localName) {
-      localName = 'anonymous';
-    }
-    GreetService.Greet(localName).then((resultValue: string) => {
-      setResult(resultValue);
-    }).catch((err: any) => {
-      console.log(err);
-    });
+  function handleTabChange(newTab: Tab) {
+    setTab(newTab)
+    setSelectedProfile(null)
   }
 
-  useEffect(() => {
-    Events.On('time', (timeValue: any) => {
-      setTime(timeValue.data);
-    });
-    // Reload WML so it picks up the wml tags
-    WML.Reload();
-  }, []);
+  function handleSelectProfile(p: Profile) {
+    setSelectedProfile(p)
+    setTab('detail')
+  }
+
+  function handleLogout() {
+    if (window.confirm('Выйти из аккаунта?')) setUser(null)
+  }
 
   return (
-    <div className="container">
-      <div>
-        <a data-wml-openURL="https://wails.io">
-          <img src="/wails.png" className="logo" alt="Wails logo"/>
-        </a>
-        <a data-wml-openURL="https://reactjs.org">
-          <img src="/react.svg" className="logo react" alt="React logo"/>
-        </a>
-      </div>
-      <h1>Wails + React</h1>
-      <div className="result">{result}</div>
-      <div className="card">
-        <div className="input-box">
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} type="text" autoComplete="off"/>
-          <button className="btn" onClick={doGreet}>Greet</button>
-        </div>
-      </div>
-      <div className="footer">
-        <div><p>Click on the Wails logo to learn more</p></div>
-        <div><p>{time}</p></div>
-      </div>
+    <div className={styles.app}>
+      <StarCanvas />
+      <TitleBar />
+      {user ? (
+        <>
+          <TopNav tab={tab} setTab={handleTabChange} user={user} onLogout={handleLogout} />
+          <div className={styles.content}>
+            {tab === 'play' && !selectedProfile && <PlayPage onSelect={handleSelectProfile} />}
+            {tab === 'detail' && selectedProfile && (
+              <DetailPage
+                profile={selectedProfile}
+                onBack={() => { setTab('play'); setSelectedProfile(null) }}
+              />
+            )}
+            {tab === 'info' && <InfoPage />}
+          </div>
+        </>
+      ) : (
+        <LoginScreen onLogin={setUser} />
+      )}
     </div>
   )
 }
-
-export default App
