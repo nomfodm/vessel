@@ -1,0 +1,124 @@
+.page {
+  padding: 24px 28px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  animation: page-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-shrink: 0;
+}
+
+.backBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font);
+  padding: 0;
+  transition: color 0.15s;
+}
+
+.backBtn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.separator {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.crumbLink {
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.crumbActive {
+  color: var(--cyan);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.mainSub {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  animation: slide-fade 0.22s ease both;
+}
+
+.banner {
+  border-radius: 14px;
+  padding: 22px 24px;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.bannerIcon {
+  position: absolute;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 56px;
+  opacity: 0.18;
+  pointer-events: none;
+  user-select: none;
+}
+
+.bannerBadges {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+.bannerTitle {
+  font-size: 22px;
+  font-weight: 900;
+  color: #fff;
+  margin-bottom: 8px;
+  letter-spacing: -0.4px;
+}
+
+.bannerDesc {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.65;
+  max-width: 480px;
+  font-weight: 500;
+}
+
+.status {
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.progressWrap {
+  width: 320px;
+  margin-bottom: 14px;
+}
+
+.actionButtons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
