@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react'
 import { Logo } from '../Logo/Logo'
 import { Icons } from '../Icons/Icons'
 import { cn } from '../../utils/cn'
@@ -13,6 +14,18 @@ interface TopNavProps {
 
 export function TopNav({ tab, setTab, user, onLogout }: TopNavProps) {
   const activeTab = tab === 'detail' ? 'play' : tab
+  const [open, setOpen] = useState(false)
+  const userRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (userRef.current && !userRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   return (
     <div className={styles.topnav}>
@@ -34,9 +47,24 @@ export function TopNav({ tab, setTab, user, onLogout }: TopNavProps) {
         <Icons.Info /> О программе
       </button>
       <div className={styles.right}>
-        <div className={styles.user} onClick={onLogout} title="Нажмите для выхода">
-          <div className={styles.avatar}>{user.username[0].toUpperCase()}</div>
-          <span className={styles.username}>{user.username}</span>
+        <div ref={userRef} className={styles.userWrap}>
+          <div
+            className={cn(styles.user, open && styles.userActive)}
+            onClick={() => setOpen(o => !o)}
+          >
+            <div className={styles.avatar}>{user.username[0].toUpperCase()}</div>
+            <span className={styles.username}>{user.username}</span>
+          </div>
+          {open && (
+            <div className={styles.dropdown}>
+              <button
+                className={styles.dropdownItem}
+                onClick={() => { setOpen(false); onLogout() }}
+              >
+                Выйти
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

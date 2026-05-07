@@ -98,7 +98,7 @@ export function InfoPage() {
         </div>
 
         <div className={styles.right}>
-          <div className={styles.floatLogo}>
+          <div className={styles.floatLogo} data-anim-infinite>
             <Logo size={96} />
           </div>
         </div>

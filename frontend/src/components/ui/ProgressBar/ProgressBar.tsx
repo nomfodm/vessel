@@ -7,7 +7,7 @@ interface ProgressBarProps {
 export function ProgressBar({ value }: ProgressBarProps) {
   return (
     <div className={styles.track}>
-      <div className={styles.fill} style={{ width: `${value}%` }} />
+      <div className={styles.fill} style={{ width: `${value}%` }} data-anim-infinite />
     </div>
   )
 }

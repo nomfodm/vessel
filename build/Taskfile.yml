@@ -17,7 +17,7 @@ tasks:
       - node_modules
     preconditions:
       - sh: npm version
-        msg: "Looks like npm isn't installed. Npm is part of the Node installer: https://nodejs.org/en/download/"
+        msg: "Looks like npm isn't installed. npm is part of the Node installer: https://nodejs.org/en/download/"
     cmds:
       - npm install
 
@@ -115,7 +115,7 @@ tasks:
     deps:
       - task: install:frontend:deps
     cmds:
-      - npm run dev -- --port {{.VITE_PORT}} --strictPort
+      - npm run dev -- --port {{.VITE_PORT}} --strictPort --host 127.0.0.1
 
   update:build-assets:
     summary: Updates the build assets

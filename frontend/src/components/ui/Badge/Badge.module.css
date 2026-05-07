@@ -1,3 +1,8 @@
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
 .badge {
   display: inline-flex;
   align-items: center;

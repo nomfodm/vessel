@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { Events } from '@wailsio/runtime'
 
 export function StarCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -38,8 +39,10 @@ export function StarCanvas() {
     }
 
     let raf: number
+    let paused = false
 
     function draw() {
+      if (paused) return
       ctx.clearRect(0, 0, W, H)
 
       const g1 = ctx.createRadialGradient(W * 0.25, H * 0.3, 0, W * 0.25, H * 0.3, 280)
@@ -82,8 +85,19 @@ export function StarCanvas() {
       raf = requestAnimationFrame(draw)
     }
 
+    const pause = () => { paused = true; cancelAnimationFrame(raf) }
+    const resume = () => { paused = false; draw() }
+
+    const off1 = Events.On('common:WindowMinimise', pause)
+    const off2 = Events.On('common:WindowRestore', resume)
+    const off3 = Events.On('common:WindowLostFocus', pause)
+    const off4 = Events.On('common:WindowFocus', resume)
+
     draw()
-    return () => cancelAnimationFrame(raf)
+    return () => {
+      cancelAnimationFrame(raf)
+      off1(); off2(); off3(); off4()
+    }
   }, [])
 
   return (

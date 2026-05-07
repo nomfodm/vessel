@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(New-Item *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(npm run *)",
+      "Bash(npx tsc *)",
+      "Bash(npx prettier *)",
+      "Bash(cat .prettierrc*)",
+      "Bash(cat prettier.config.*)",
+      "Bash(Get-ChildItem *)",
+      "Bash(Select-Object -First 20)",
+      "Bash(\\\\.ts\")",
+      "PowerShell(head *)",
+      "Bash(pnpm exec *)",
+      "Bash(pnpm build:dev)"
+    ]
+  }
+}

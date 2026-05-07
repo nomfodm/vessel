@@ -9,8 +9,9 @@
   user-select: none;
   flex-shrink: 0;
   z-index: 10;
-  -webkit-app-region: drag;
-  app-region: drag;
+  /*-webkit-app-region: drag;*/
+  /*app-region: drag;*/
+  --wails-draggable: drag;
 }
 
 .title {

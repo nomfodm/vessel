@@ -63,6 +63,10 @@ input[type='range']::-webkit-slider-thumb:active {
   cursor: grabbing;
 }
 
+html.paused [data-anim-infinite] {
+  animation-play-state: paused !important;
+}
+
 @keyframes page-in {
   from {
     opacity: 0;
@@ -118,4 +122,10 @@ input[type='range']::-webkit-slider-thumb:active {
     opacity: 1;
     transform: none;
   }
+}
+
+@keyframes grad-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }

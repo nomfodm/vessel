@@ -5,8 +5,10 @@ import { Button } from '../ui/Button/Button'
 import { Input } from '../ui/Input/Input'
 import { Spinner } from '../ui/Spinner/Spinner'
 import { Icons } from '../Icons/Icons'
+import { cn } from '../../utils/cn'
 import type { User } from '../../types'
 import styles from './LoginScreen.module.css'
+import {Browser} from "@wailsio/runtime";
 
 interface LoginScreenProps {
   onLogin: (user: User) => void
@@ -16,7 +18,6 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   const [form, setForm] = useState({ user: '', pass: '' })
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
-
   async function submit(e: FormEvent) {
     e.preventDefault()
     setErr('')
@@ -34,8 +35,8 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
       <div className={styles.glow} />
       <div className={styles.panel}>
         <div className={styles.header}>
-          <div className={styles.logoFloat}>
-            <Logo size={52} />
+          <div className={styles.logoFloat} data-anim-infinite>
+            <Logo size={48} />
           </div>
           <div>
             <div className={styles.title}>
@@ -61,26 +62,30 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
               value={form.pass}
               onChange={e => setForm({ ...form, pass: e.target.value })}
             />
-            {err && (
-              <div className={styles.error}>
-                <Icons.Err color="#fca5a5" /> {err}
+            <div className={styles.bottomGroup}>
+              <div className={cn(styles.errorWrapper, !!err && styles.errorVisible)}>
+                <div className={styles.errorInner}>
+                  <div className={styles.error}>
+                    <Icons.Err color="#fca5a5" /> {err}
+                  </div>
+                </div>
               </div>
-            )}
-            <Button
-              variant="primary"
-              type="submit"
-              disabled={loading}
-              className={styles.submitBtn}
-              style={{ height: 46, fontSize: 15, borderRadius: 12 }}
-            >
-              {loading ? <><Spinner /> Входим...</> : 'Войти'}
-            </Button>
+              <Button
+                variant="primary"
+                type="submit"
+                disabled={loading}
+                className={styles.submitBtn}
+                style={{ height: 44, fontSize: 15, borderRadius: 12 }}
+              >
+                {loading ? <><Spinner /> Входим...</> : 'Войти'}
+              </Button>
+            </div>
           </form>
 
           <div className={styles.footer}>
             <span className={styles.footerText}>
               Нет аккаунта?{' '}
-              <span className={styles.registerLink} onClick={() => alert('Откроется сайт для регистрации')}>
+              <span className={styles.registerLink} onClick={() => Browser.OpenURL("https://infinityserver.ru/register")}>
                 Создайте же его! ↗
               </span>
             </span>

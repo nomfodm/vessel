@@ -1,3 +1,8 @@
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+
 .topnav {
   height: 52px;
   background: rgba(255, 255, 255, 0.025);
@@ -90,6 +95,10 @@
   gap: 8px;
 }
 
+.userWrap {
+  position: relative;
+}
+
 .user {
   display: flex;
   align-items: center;
@@ -105,6 +114,45 @@
 .user:hover {
   background: var(--glass-hover);
   border-color: rgba(37, 195, 232, 0.25);
+}
+
+.userActive {
+  background: var(--glass-hover);
+  border-color: rgba(37, 195, 232, 0.35);
+}
+
+.dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: rgba(12, 12, 26, 0.97);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 5px;
+  backdrop-filter: blur(24px);
+  min-width: 130px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  animation: page-in 0.15s cubic-bezier(0.16, 1, 0.3, 1) both;
+  z-index: 100;
+}
+
+.dropdownItem {
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: #f87171;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border-radius: 7px;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.dropdownItem:hover {
+  background: rgba(239, 68, 68, 0.12);
 }
 
 .avatar {
