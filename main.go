@@ -1,20 +1,48 @@
 package main
 
 import (
+	"context"
 	"embed"
 	_ "embed"
 	"log"
 	"log/slog"
-	"time"
+	"os"
+	"path/filepath"
 
+	"github.com/nomfodm/vessel/internal/auth"
 	"github.com/nomfodm/vessel/internal/config"
+	"github.com/nomfodm/vessel/internal/engine"
+	"github.com/nomfodm/vessel/internal/game"
 	"github.com/nomfodm/vessel/internal/logging"
 	"github.com/nomfodm/vessel/internal/paths"
+	"github.com/nomfodm/vessel/internal/profile"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-// version is injected at build time via -ldflags "-X main.version=...".
-var version = "dev"
+// Defaults point at the public infrastructure; override at build time via
+// -ldflags "-X main.<name>=...". These are public URLs, not secrets.
+var (
+	version     = "dev"
+	s3BaseURL   = "https://storage.infinityserver.ru/" // index.json, manifests, files/<ab>/<sha>
+	authBaseURL = "https://api.infinityserver.ru"      // auth API
+)
+
+// wailsEmitter adapts the Wails event bus to game.Emitter. The app pointer is
+// set after the application is built (services are constructed before it).
+type wailsEmitter struct{ app *application.App }
+
+func (e *wailsEmitter) Emit(event string, data any) {
+	if e.app != nil {
+		e.app.Event.Emit(event, data)
+	}
+}
+
+// tokenKeyMaterial derives a stable per-machine key for the encrypted token
+// fallback. Not a secret store — just makes a copied file useless elsewhere.
+func tokenKeyMaterial() string {
+	host, _ := os.Hostname()
+	return host + "|" + os.Getenv("USERNAME") + os.Getenv("USER")
+}
 
 // Wails uses Go's `embed` package to embed the frontend files into the binary.
 // Any files in the frontend/dist folder will be embedded into the binary and
@@ -24,21 +52,11 @@ var version = "dev"
 //go:embed all:frontend/dist
 var assets embed.FS
 
-func init() {
-	// Register a custom event whose associated data type is string.
-	// This is not required, but the binding generator will pick up registered events
-	// and provide a strongly typed JS/TS API for them.
-	application.RegisterEvent[string]("time")
-}
-
 type App struct {
 	app        *application.App
 	mainWindow *application.WebviewWindow
 }
 
-// main function serves as the application's entry point. It initializes the application, creates a window,
-// and starts a goroutine that emits a time-based event every second. It subsequently runs the application and
-// logs any error that might occur.
 func main() {
 	dev := version == "dev"
 
@@ -62,6 +80,29 @@ func main() {
 		logger.Error("load config failed, continuing with defaults", "err", err)
 	}
 
+	layout := paths.Resolve(cfg.DataRoot())
+	logger.Info("data layout resolved", "root", layout.Root)
+
+	eng, err := engine.New(layout, logger)
+	if err != nil {
+		logger.Error("init file engine failed", "err", err)
+		log.Fatalf("init engine: %v", err)
+	}
+
+	profiles := profile.New(s3BaseURL, nil, logger)
+
+	authSvc := auth.New(
+		auth.NewBackend(authBaseURL, nil),
+		auth.NewStore(filepath.Join(paths.CacheDir(), "token.enc"), tokenKeyMaterial()),
+		logger,
+	)
+	if _, err := authSvc.Restore(context.Background()); err != nil {
+		logger.Warn("session restore failed", "err", err)
+	}
+
+	emitter := &wailsEmitter{}
+	gameSvc := game.New(layout, profiles, eng, authSvc, cfg, emitter, logger)
+
 	app := App{}
 	// Create a new Wails application by providing the necessary options.
 	// Variables 'Name' and 'Description' are for application metadata.
@@ -72,8 +113,10 @@ func main() {
 		Name:        "Infinity Launcher",
 		Description: "Infinity Launcher",
 		Services: []application.Service{
-			application.NewService(&GreetService{}),
 			application.NewService(cfg),
+			application.NewService(profiles),
+			application.NewService(authSvc),
+			application.NewService(gameSvc),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
@@ -106,15 +149,8 @@ func main() {
 		URL:              "/",
 	})
 
-	// Create a goroutine that emits an event containing the current time every second.
-	// The frontend can listen to this event and update the UI accordingly.
-	go func() {
-		for {
-			now := time.Now().Format(time.RFC1123)
-			app.app.Event.Emit("time", now)
-			time.Sleep(time.Second)
-		}
-	}()
+	// App now exists: wire it into the emitter so game events reach the frontend.
+	emitter.app = app.app
 
 	logger.Info("running application")
 	err = app.app.Run()

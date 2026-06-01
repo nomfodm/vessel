@@ -4,6 +4,19 @@
   padding: 0;
 }
 
+/* Desktop app: no text selection or native context menu by default. */
+* {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Keep selection where it makes sense — editable fields. */
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 :root {
   --cyan: #25c3e8;
   --purple: #5625e8;

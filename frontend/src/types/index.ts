@@ -1,15 +1,27 @@
+export interface Server {
+  name: string;
+  host: string;
+  port: number;
+}
+
+// Mirrors the Go profile.Profile (index.json on S3). Ping fields (players/status)
+// are runtime-only, not part of the manifest, so they are optional.
 export interface Profile {
-  id: number;
   slug: string;
   title: string;
   version: string;
+  mcVersion: string;
   desc: string;
-  players: { online: number; max: number };
-  status: "online" | "offline";
-  bg: string;
+  icon: string;
   accent: string;
   accentDim: string;
-  icon: string;
+  bg: string;
+  order: number;
+  hidden: boolean;
+  servers: Server[];
+  manifestPath: string;
+  players?: { online: number; max: number };
+  status?: "online" | "offline";
 }
 
 export interface OptFile {

@@ -3,16 +3,18 @@ package auth
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 )
 
-// httpBackend talks to the infinityserver.ru auth API. Endpoint paths and the
-// response shape are isolated here — adjust to the real API without touching
-// Service.
+// httpBackend talks to the infinityserver.ru launcher API (base + /v1/...).
+// Endpoint paths and response shapes are isolated here — adjust to the real API
+// without touching Service.
 type httpBackend struct {
 	baseURL string
 	http    *http.Client
@@ -25,84 +27,133 @@ func NewBackend(baseURL string, client *http.Client) Backend {
 	return &httpBackend{baseURL: strings.TrimRight(baseURL, "/"), http: client}
 }
 
-type authResponse struct {
-	AccessToken  string `json:"accessToken"`
-	RefreshToken string `json:"refreshToken"`
-	ExpiresInSec int    `json:"expiresIn"`
-	UUID         string `json:"uuid"`
-	Username     string `json:"username"`
+// tokenPair is the login/refresh response.
+type tokenPair struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+// userMeResponse is the subset of GET /v1/user/me we need.
+type userMeResponse struct {
+	Username         string `json:"username"`
+	MinecraftProfile struct {
+		UUID     string `json:"uuid"`
+		Nickname string `json:"nickname"`
+	} `json:"minecraft_profile"`
+}
+
+// sessionResponse is POST /v1/launcher/sessions (CreateMinecraftSession).
+type sessionResponse struct {
+	AccessToken string `json:"access_token"`
+	ProfileUUID string `json:"profile_uuid"`
+	Nickname    string `json:"nickname"`
 }
 
 func (b *httpBackend) Login(ctx context.Context, username, password string) (Tokens, User, error) {
-	return b.post(ctx, "/auth/login", map[string]string{
-		"username": username,
-		"password": password,
-	})
+	var tp tokenPair
+	if err := b.do(ctx, http.MethodPost, "/v1/launcher/auth/login",
+		map[string]string{"username": username, "password": password}, "", &tp); err != nil {
+		return Tokens{}, User{}, err
+	}
+	user, err := b.me(ctx, tp.AccessToken)
+	if err != nil {
+		return Tokens{}, User{}, err
+	}
+	return tokensFrom(tp), user, nil
 }
 
 func (b *httpBackend) Refresh(ctx context.Context, refreshToken string) (Tokens, User, error) {
-	return b.post(ctx, "/auth/refresh", map[string]string{
-		"refreshToken": refreshToken,
-	})
+	var tp tokenPair
+	if err := b.do(ctx, http.MethodPost, "/v1/launcher/auth/refresh",
+		map[string]string{"refresh_token": refreshToken}, "", &tp); err != nil {
+		return Tokens{}, User{}, err
+	}
+	user, err := b.me(ctx, tp.AccessToken)
+	if err != nil {
+		return Tokens{}, User{}, err
+	}
+	return tokensFrom(tp), user, nil
 }
 
-type gameSessionResponse struct {
-	UUID      string `json:"uuid"`
-	Username  string `json:"username"`
-	GameToken string `json:"gameToken"`
+func (b *httpBackend) me(ctx context.Context, jwt string) (User, error) {
+	var m userMeResponse
+	if err := b.do(ctx, http.MethodGet, "/v1/user/me", nil, jwt, &m); err != nil {
+		return User{}, err
+	}
+	return User{UUID: m.MinecraftProfile.UUID, Username: m.Username}, nil
 }
 
 func (b *httpBackend) IssueGameSession(ctx context.Context, launcherAccessToken string) (GameSession, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, b.baseURL+"/auth/game-session", nil)
-	if err != nil {
+	var s sessionResponse
+	if err := b.do(ctx, http.MethodPost, "/v1/launcher/sessions", nil, launcherAccessToken, &s); err != nil {
 		return GameSession{}, err
 	}
-	req.Header.Set("Authorization", "Bearer "+launcherAccessToken)
-
-	resp, err := b.http.Do(req)
-	if err != nil {
-		return GameSession{}, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return GameSession{}, fmt.Errorf("issue game session: status %d", resp.StatusCode)
-	}
-
-	var gr gameSessionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&gr); err != nil {
-		return GameSession{}, err
-	}
-	return GameSession{UUID: gr.UUID, Username: gr.Username, AccessToken: gr.GameToken}, nil
+	return GameSession{UUID: s.ProfileUUID, Username: s.Nickname, AccessToken: s.AccessToken}, nil
 }
 
-func (b *httpBackend) post(ctx context.Context, path string, body any) (Tokens, User, error) {
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return Tokens{}, User{}, err
+// do performs an HTTP call: marshals body (if any), sets Bearer (if jwt != ""),
+// and decodes a 2xx JSON response into dst.
+func (b *httpBackend) do(ctx context.Context, method, path string, body any, jwt string, dst any) error {
+	var reader io.Reader
+	if body != nil {
+		buf, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		reader = bytes.NewReader(buf)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, b.baseURL+path, bytes.NewReader(buf))
+
+	req, err := http.NewRequestWithContext(ctx, method, b.baseURL+path, reader)
 	if err != nil {
-		return Tokens{}, User{}, err
+		return err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if jwt != "" {
+		req.Header.Set("Authorization", "Bearer "+jwt)
+	}
 
 	resp, err := b.http.Do(req)
 	if err != nil {
-		return Tokens{}, User{}, err
+		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return Tokens{}, User{}, fmt.Errorf("auth %s: status %d", path, resp.StatusCode)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("%s %s: status %d", method, path, resp.StatusCode)
 	}
+	if dst == nil {
+		return nil
+	}
+	return json.NewDecoder(resp.Body).Decode(dst)
+}
 
-	var ar authResponse
-	if err := json.NewDecoder(resp.Body).Decode(&ar); err != nil {
-		return Tokens{}, User{}, err
+func tokensFrom(tp tokenPair) Tokens {
+	return Tokens{
+		Access:    tp.AccessToken,
+		Refresh:   tp.RefreshToken,
+		ExpiresAt: jwtExp(tp.AccessToken),
 	}
-	tokens := Tokens{
-		Access:    ar.AccessToken,
-		Refresh:   ar.RefreshToken,
-		ExpiresAt: time.Now().Add(time.Duration(ar.ExpiresInSec) * time.Second),
+}
+
+// jwtExp reads the "exp" claim from a JWT without verifying the signature (HTTPS
+// protects transit; the server verifies). Falls back to a short lifetime when the
+// token cannot be parsed, so a refresh happens soon rather than never.
+func jwtExp(token string) time.Time {
+	fallback := time.Now().Add(15 * time.Minute)
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return fallback
 	}
-	return tokens, User{UUID: ar.UUID, Username: ar.Username}, nil
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return fallback
+	}
+	var claims struct {
+		Exp int64 `json:"exp"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil || claims.Exp == 0 {
+		return fallback
+	}
+	return time.Unix(claims.Exp, 0)
 }

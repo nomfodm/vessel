@@ -1,38 +1,50 @@
 import { useState, useEffect } from 'react'
 import { Badge } from '../ui/Badge/Badge'
-import { PROFILES } from '../../data/profiles'
+import { Spinner } from '../ui/Spinner/Spinner'
+import { Service as ProfileService } from '../../../bindings/github.com/nomfodm/vessel/internal/profile'
 import type { Profile } from '../../types'
 import styles from './PlayPage.module.css'
-
-type PingStatus = 'pinging' | 'online' | 'offline'
 
 interface PlayPageProps {
   onSelect: (profile: Profile) => void
 }
 
 export function PlayPage({ onSelect }: PlayPageProps) {
-  const [pings, setPings] = useState<Record<number, PingStatus>>({ 1: 'pinging', 2: 'pinging', 3: 'pinging' })
+  const [profiles, setProfiles] = useState<Profile[]>([])
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState('')
 
   useEffect(() => {
-    PROFILES.forEach((p, i) => {
-      setTimeout(() => setPings(prev => ({ ...prev, [p.id]: p.status })), 500 + i * 350)
-    })
+    let cancelled = false
+    ProfileService.Profiles()
+      .then(list => { if (!cancelled) setProfiles(list as Profile[]) })
+      .catch(() => { if (!cancelled) setErr('Не удалось загрузить список режимов') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [])
 
-  const onlineCount = PROFILES.filter(p => p.status === 'online').length
+  if (loading) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.header}>
+          <div className={styles.title}>Выберите режим</div>
+          <div className={styles.subtitle}><Spinner /> Загрузка...</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={styles.page}>
       <div className={styles.header}>
         <div className={styles.title}>Выберите режим</div>
-        <div className={styles.subtitle}>{onlineCount} из {PROFILES.length} серверов онлайн</div>
+        <div className={styles.subtitle}>{err || `Доступно режимов: ${profiles.length}`}</div>
       </div>
       <div className={styles.grid}>
-        {PROFILES.map(p => {
-          const ps = pings[p.id]
+        {profiles.map(p => {
           return (
             <div
-              key={p.id}
+              key={p.slug}
               className={styles.card}
               style={{ background: p.bg }}
               onClick={() => onSelect(p)}
@@ -54,9 +66,8 @@ export function PlayPage({ onSelect }: PlayPageProps) {
                 <div className={styles.cardDesc}>{p.desc.slice(0, 60)}...</div>
                 <div className={styles.badges}>
                   <Badge variant="version">{p.version}</Badge>
-                  {ps === 'pinging' && <Badge variant="pinging">Пинг...</Badge>}
-                  {ps === 'online' && <Badge variant="online">{p.players.online}/{p.players.max}</Badge>}
-                  {ps === 'offline' && <Badge variant="offline">Оффлайн</Badge>}
+                  {p.status === 'online' && p.players && <Badge variant="online">{p.players.online}/{p.players.max}</Badge>}
+                  {p.status === 'offline' && <Badge variant="offline">Оффлайн</Badge>}
                 </div>
               </div>
             </div>

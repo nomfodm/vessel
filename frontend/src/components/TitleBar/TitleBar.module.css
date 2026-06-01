@@ -33,6 +33,7 @@
   height: 100%;
   -webkit-app-region: no-drag;
   app-region: no-drag;
+  --wails-draggable: no-drag;
 }
 
 .ctrl {
@@ -45,9 +46,12 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.1s, color 0.1s;
   font-size: 16px;
   font-family: var(--font);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  --wails-draggable: no-drag;
 }
 
 .minimize:hover {
@@ -55,7 +59,16 @@
   color: var(--text);
 }
 
+.minimize:active {
+  background: rgba(255, 255, 255, 0.14);
+}
+
 .close:hover {
   background: rgba(196, 43, 43, 0.85);
+  color: #fff;
+}
+
+.close:active {
+  background: rgba(196, 43, 43, 1);
   color: #fff;
 }

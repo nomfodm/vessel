@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
+import { Events } from '@wailsio/runtime'
 import { Icons } from '../Icons/Icons'
 import { Button } from '../ui/Button/Button'
 import { Badge } from '../ui/Badge/Badge'
@@ -7,6 +8,8 @@ import { ProgressBar } from '../ui/ProgressBar/ProgressBar'
 import { SettingsSub } from './SettingsSub/SettingsSub'
 import { OptFilesSub } from './OptFilesSub/OptFilesSub'
 import { OPT_FILES } from '../../data/profiles'
+import { Service as GameService } from '../../../bindings/github.com/nomfodm/vessel/internal/game'
+import { ConfigService } from '../../../bindings/github.com/nomfodm/vessel/internal/config'
 import type { Profile, OptFile, GameState } from '../../types'
 import styles from './DetailPage.module.css'
 
@@ -24,35 +27,55 @@ export function DetailPage({ profile, onBack }: DetailPageProps) {
   const [ram, setRam] = useState(4096)
   const [path] = useState(`C:\\Users\\Player\\AppData\\Roaming\\.infinity\\${profile.slug}`)
   const [optFiles, setOptFiles] = useState<OptFile[]>(OPT_FILES)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Load persisted per-profile settings from config.json.
+  useEffect(() => {
+    let cancelled = false
+    ConfigService.Snapshot()
+      .then(cfg => {
+        if (cancelled) return
+        const pc = cfg.profiles?.[profile.slug]
+        if (!pc) return
+        if (pc.ramMB) setRam(pc.ramMB)
+        const enabled = new Set(pc.enabledOptional ?? [])
+        setOptFiles(prev => prev.map(f => ({ ...f, on: enabled.has(f.id) })))
+      })
+      .catch(() => { /* keep defaults */ })
+    return () => { cancelled = true }
+  }, [profile.slug])
+
+  function handleRamChange(next: number) {
+    setRam(next)
+    ConfigService.SetProfileRAM(profile.slug, next).catch(() => { /* ignore */ })
+  }
+
+  // Subscribe to backend game lifecycle events while this page is mounted.
+  useEffect(() => {
+    const offProgress = Events.On('sync:progress', (e: { data: { done: number; total: number } }) => {
+      setGs('dl')
+      setProg({ done: e.data.done, total: e.data.total })
+    })
+    const offStarted = Events.On('game:started', () => setGs('playing'))
+    const offExited = Events.On('game:exited', () => {
+      setGs('idle')
+      setProg({ done: 0, total: 100 })
+    })
+    return () => { offProgress(); offStarted(); offExited() }
+  }, [])
 
   function startPlay() {
     setGs('fetching')
-    setTimeout(() => {
-      setGs('dl')
-      setProg({ done: 0, total: 312 })
-      timerRef.current = setInterval(() => {
-        setProg(p => {
-          const next = Math.min(p.done + Math.floor(Math.random() * 15) + 5, p.total)
-          if (next >= p.total) {
-            clearInterval(timerRef.current!)
-            setGs('prep')
-            setTimeout(() => setGs('playing'), 1100)
-            return { ...p, done: p.total }
-          }
-          return { ...p, done: next }
-        })
-      }, 140)
-    }, 800)
+    GameService.Launch(profile.slug).catch(() => {
+      setGs('idle')
+      setProg({ done: 0, total: 100 })
+    })
   }
 
   function cancel() {
-    if (timerRef.current) clearInterval(timerRef.current)
+    GameService.Stop().catch(() => { /* ignore */ })
     setGs('idle')
     setProg({ done: 0, total: 100 })
   }
-
-  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current) }, [])
 
   const isIdle = gs === 'idle'
   const isLoading = gs === 'fetching' || gs === 'dl' || gs === 'prep'
@@ -67,7 +90,12 @@ export function DetailPage({ profile, onBack }: DetailPageProps) {
   }
 
   function handleToggle(id: string) {
-    setOptFiles(prev => prev.map(f => f.id === id ? { ...f, on: !f.on } : f))
+    setOptFiles(prev => {
+      const next = prev.map(f => f.id === id ? { ...f, on: !f.on } : f)
+      const enabled = next.filter(f => f.on).map(f => f.id)
+      ConfigService.SetEnabledOptional(profile.slug, enabled).catch(() => { /* ignore */ })
+      return next
+    })
   }
 
   return (
@@ -104,9 +132,11 @@ export function DetailPage({ profile, onBack }: DetailPageProps) {
             <div className={styles.bannerIcon}>{profile.icon}</div>
             <div className={styles.bannerBadges}>
               <Badge variant="version">{profile.version}</Badge>
-              {profile.status === 'online'
+              {profile.status === 'online' && profile.players
                 ? <Badge variant="online">{profile.players.online}/{profile.players.max}</Badge>
-                : <Badge variant="offline">Оффлайн</Badge>}
+                : profile.status === 'offline'
+                  ? <Badge variant="offline">Оффлайн</Badge>
+                  : null}
             </div>
             <div className={styles.bannerTitle}>{profile.title}</div>
             <div className={styles.bannerDesc}>{profile.desc}</div>
@@ -157,7 +187,7 @@ export function DetailPage({ profile, onBack }: DetailPageProps) {
       )}
 
       {sub === 'settings' && (
-        <SettingsSub ram={ram} path={path} onRamChange={setRam} />
+        <SettingsSub ram={ram} path={path} onRamChange={handleRamChange} />
       )}
 
       {sub === 'optfiles' && (

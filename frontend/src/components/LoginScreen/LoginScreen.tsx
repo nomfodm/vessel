@@ -8,7 +8,8 @@ import { Icons } from '../Icons/Icons'
 import { cn } from '../../utils/cn'
 import type { User } from '../../types'
 import styles from './LoginScreen.module.css'
-import {Browser} from "@wailsio/runtime";
+import { Browser } from "@wailsio/runtime"
+import { Service as AuthService } from '../../../bindings/github.com/nomfodm/vessel/internal/auth'
 
 interface LoginScreenProps {
   onLogin: (user: User) => void
@@ -25,9 +26,15 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
     if (form.user.length < 3) { setErr('Имя пользователя слишком короткое'); return }
     if (form.pass.length < 6) { setErr('Пароль: минимум 6 символов'); return }
     setLoading(true)
-    await new Promise(r => setTimeout(r, 900))
-    setLoading(false)
-    onLogin({ username: form.user })
+    try {
+      await AuthService.Login(form.user, form.pass)
+      const u = await AuthService.CurrentUser()
+      onLogin({ username: u.username })
+    } catch {
+      setErr('Неверный логин или пароль')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

@@ -21,13 +21,18 @@ type Server struct {
 }
 
 type Profile struct {
-	Slug         string   `json:"slug"`
-	Title        string   `json:"title"`
-	Version      string   `json:"version"`
-	MCVersion    string   `json:"mcVersion"`
-	Description  string   `json:"description"`
-	Color        string   `json:"color"`
-	Icon         string   `json:"icon"`
+	Slug        string `json:"slug"`
+	Title       string `json:"title"`
+	Version     string `json:"version"`
+	MCVersion   string `json:"mcVersion"`
+	Description string `json:"desc"`
+
+	// Presentation fields, authored in index.json on S3 (not computed):
+	Icon      string `json:"icon"`
+	Accent    string `json:"accent"`
+	AccentDim string `json:"accentDim"`
+	Bg        string `json:"bg"`
+
 	Order        int      `json:"order"`
 	Hidden       bool     `json:"hidden"`
 	Servers      []Server `json:"servers"`
