@@ -4,10 +4,17 @@ import (
 	"embed"
 	_ "embed"
 	"log"
+	"log/slog"
 	"time"
 
+	"github.com/nomfodm/vessel/internal/config"
+	"github.com/nomfodm/vessel/internal/logging"
+	"github.com/nomfodm/vessel/internal/paths"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+// version is injected at build time via -ldflags "-X main.version=...".
+var version = "dev"
 
 // Wails uses Go's `embed` package to embed the frontend files into the binary.
 // Any files in the frontend/dist folder will be embedded into the binary and
@@ -33,6 +40,28 @@ type App struct {
 // and starts a goroutine that emits a time-based event every second. It subsequently runs the application and
 // logs any error that might occur.
 func main() {
+	dev := version == "dev"
+
+	logger, closer, err := logging.New(paths.LogDir(), dev)
+	if err != nil {
+		log.Fatalf("init logging: %v", err)
+	}
+	defer closer.Close()
+	slog.SetDefault(logger)
+
+	logger.Info("vessel starting", "version", version, "dev", dev)
+	logger.Debug("resolved paths",
+		"config", paths.ConfigFile(),
+		"dataRoot", paths.DefaultDataRoot(),
+		"logs", paths.LogDir(),
+		"cache", paths.CacheDir(),
+	)
+
+	cfg := config.New(paths.ConfigFile(), logger)
+	if err := cfg.Load(); err != nil {
+		logger.Error("load config failed, continuing with defaults", "err", err)
+	}
+
 	app := App{}
 	// Create a new Wails application by providing the necessary options.
 	// Variables 'Name' and 'Description' are for application metadata.
@@ -40,10 +69,11 @@ func main() {
 	// 'Bind' is a list of Go struct instances. The frontend has access to the methods of these instances.
 	// 'Mac' options tailor the application when running an macOS.
 	app.app = application.New(application.Options{
-		Name:        "vessel",
+		Name:        "Infinity Launcher",
 		Description: "Infinity Launcher",
 		Services: []application.Service{
 			application.NewService(&GreetService{}),
+			application.NewService(cfg),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
@@ -86,11 +116,11 @@ func main() {
 		}
 	}()
 
-	// Run the application. This blocks until the application has been exited.
-	err := app.app.Run()
-
-	// If an error occurred while running the application, log it and exit.
+	logger.Info("running application")
+	err = app.app.Run()
 	if err != nil {
+		logger.Error("application exited with error", "err", err)
 		log.Fatal(err)
 	}
+	logger.Info("vessel stopped")
 }

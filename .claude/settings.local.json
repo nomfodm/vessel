@@ -14,7 +14,11 @@
       "Bash(\\\\.ts\")",
       "PowerShell(head *)",
       "Bash(pnpm exec *)",
-      "Bash(pnpm build:dev)"
+      "Bash(pnpm build:dev)",
+      "Bash(go get *)",
+      "Bash(go mod *)",
+      "Bash(go vet *)",
+      "Bash(go test *)"
     ]
   }
 }
