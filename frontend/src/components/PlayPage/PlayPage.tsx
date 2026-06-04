@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Badge } from '../ui/Badge/Badge'
 import { Spinner } from '../ui/Spinner/Spinner'
 import { Service as ProfileService } from '../../../bindings/github.com/nomfodm/vessel/internal/profile'
+import { Service as PingService } from '../../../bindings/github.com/nomfodm/vessel/internal/ping'
 import type { Profile } from '../../types'
 import styles from './PlayPage.module.css'
 
@@ -9,8 +10,11 @@ interface PlayPageProps {
   onSelect: (profile: Profile) => void
 }
 
+type Ping = { state: 'pinging' | 'online' | 'offline'; online: number; max: number }
+
 export function PlayPage({ onSelect }: PlayPageProps) {
   const [profiles, setProfiles] = useState<Profile[]>([])
+  const [pings, setPings] = useState<Record<string, Ping>>({})
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
 
@@ -22,6 +26,30 @@ export function PlayPage({ onSelect }: PlayPageProps) {
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [])
+
+  // Ping each profile's primary server once the list is loaded.
+  useEffect(() => {
+    let cancelled = false
+    for (const p of profiles) {
+      const srv = p.servers[0]
+      if (!srv) continue
+      setPings(prev => ({ ...prev, [p.slug]: { state: 'pinging', online: 0, max: 0 } }))
+      PingService.Ping(srv.host, srv.port)
+        .then(st => {
+          if (cancelled) return
+          setPings(prev => ({
+            ...prev,
+            [p.slug]: st.online
+              ? { state: 'online', online: st.playersOnline, max: st.playersMax }
+              : { state: 'offline', online: 0, max: 0 },
+          }))
+        })
+        .catch(() => {
+          if (!cancelled) setPings(prev => ({ ...prev, [p.slug]: { state: 'offline', online: 0, max: 0 } }))
+        })
+    }
+    return () => { cancelled = true }
+  }, [profiles])
 
   if (loading) {
     return (
@@ -66,8 +94,12 @@ export function PlayPage({ onSelect }: PlayPageProps) {
                 <div className={styles.cardDesc}>{p.desc.slice(0, 60)}...</div>
                 <div className={styles.badges}>
                   <Badge variant="version">{p.version}</Badge>
-                  {p.status === 'online' && p.players && <Badge variant="online">{p.players.online}/{p.players.max}</Badge>}
-                  {p.status === 'offline' && <Badge variant="offline">Оффлайн</Badge>}
+                  {p.servers.length > 0 && (() => {
+                    const ping = pings[p.slug]
+                    if (!ping || ping.state === 'pinging') return <Badge variant="pinging">проверка</Badge>
+                    if (ping.state === 'online') return <Badge variant="online">{ping.online}/{ping.max}</Badge>
+                    return <Badge variant="offline">Оффлайн</Badge>
+                  })()}
                 </div>
               </div>
             </div>

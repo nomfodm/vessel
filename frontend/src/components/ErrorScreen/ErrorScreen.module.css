@@ -1,0 +1,134 @@
+.screen {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-deep);
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+  animation: err-in 0.3s ease both;
+}
+
+/* Soft scrim so status text stays legible when a flash pops behind it; edges of
+   the screen keep the neon at full strength. */
+.screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(ellipse 440px 340px at center, rgba(5, 5, 14, 0.55), transparent 72%);
+}
+
+@keyframes err-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.panel {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  z-index: 2;
+}
+
+.mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 52px;
+  margin-bottom: 20px;
+}
+
+.markDown {
+  border-color: #c4584a;
+  color: #e0796b;
+}
+
+.markWarn {
+  border-color: #c79a3a;
+  color: #e0c06b;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.subtitle {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.list {
+  width: 100%;
+  margin-top: 22px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  font-size: 13px;
+}
+
+.row + .row {
+  border-top: 1px solid var(--glass-border);
+}
+
+.rowName {
+  color: var(--text);
+}
+
+.up {
+  color: #5ec98a;
+  font-weight: 600;
+}
+
+.warn {
+  color: #e0c06b;
+  font-weight: 600;
+}
+
+.down {
+  color: #e0796b;
+  font-weight: 600;
+}
+
+.retry {
+  margin-top: 24px;
+  width: 100%;
+  height: 42px;
+  border: none;
+  border-radius: 12px;
+  background: var(--grad);
+  color: #fff;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.retry:hover {
+  filter: brightness(1.08);
+}
+
+.retry:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

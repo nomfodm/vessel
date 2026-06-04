@@ -7,11 +7,17 @@ import { Spinner } from '../ui/Spinner/Spinner'
 import { ProgressBar } from '../ui/ProgressBar/ProgressBar'
 import { SettingsSub } from './SettingsSub/SettingsSub'
 import { OptFilesSub } from './OptFilesSub/OptFilesSub'
-import { OPT_FILES } from '../../data/profiles'
 import { Service as GameService } from '../../../bindings/github.com/nomfodm/vessel/internal/game'
+import { Service as ProfileService } from '../../../bindings/github.com/nomfodm/vessel/internal/profile'
 import { ConfigService } from '../../../bindings/github.com/nomfodm/vessel/internal/config'
 import type { Profile, OptFile, GameState } from '../../types'
 import styles from './DetailPage.module.css'
+
+function formatSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${bytes} B`
+}
 
 type DetailSub = 'main' | 'settings' | 'optfiles'
 
@@ -26,21 +32,29 @@ export function DetailPage({ profile, onBack }: DetailPageProps) {
   const [prog, setProg] = useState({ done: 0, total: 100 })
   const [ram, setRam] = useState(4096)
   const [path] = useState(`C:\\Users\\Player\\AppData\\Roaming\\.infinity\\${profile.slug}`)
-  const [optFiles, setOptFiles] = useState<OptFile[]>(OPT_FILES)
+  const [optFiles, setOptFiles] = useState<OptFile[]>([])
 
-  // Load persisted per-profile settings from config.json.
+  // Optional files come from the profile manifest; their on/off state and RAM
+  // are overlaid from config.json. A null enabledOptional means "never
+  // configured" → fall back to each file's manifest default.
   useEffect(() => {
     let cancelled = false
-    ConfigService.Snapshot()
-      .then(cfg => {
-        if (cancelled) return
-        const pc = cfg.profiles?.[profile.slug]
-        if (!pc) return
-        if (pc.ramMB) setRam(pc.ramMB)
-        const enabled = new Set(pc.enabledOptional ?? [])
-        setOptFiles(prev => prev.map(f => ({ ...f, on: enabled.has(f.id) })))
-      })
-      .catch(() => { /* keep defaults */ })
+    Promise.all([
+      ProfileService.OptionalFiles(profile.slug).catch(() => []),
+      ConfigService.Snapshot().catch(() => null),
+    ]).then(([opts, cfg]) => {
+      if (cancelled) return
+      const pc = cfg?.profiles?.[profile.slug]
+      if (pc?.ramMB) setRam(pc.ramMB)
+      const enabled = Array.isArray(pc?.enabledOptional) ? new Set(pc!.enabledOptional) : null
+      setOptFiles(opts.map(o => ({
+        id: o.id,
+        name: o.name,
+        desc: o.desc,
+        size: formatSize(o.sizeBytes),
+        on: enabled ? enabled.has(o.id) : o.defaultOn,
+      })))
+    })
     return () => { cancelled = true }
   }, [profile.slug])
 

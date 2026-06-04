@@ -6,16 +6,21 @@ import (
 	_ "embed"
 	"log"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/nomfodm/vessel/internal/auth"
 	"github.com/nomfodm/vessel/internal/config"
 	"github.com/nomfodm/vessel/internal/engine"
 	"github.com/nomfodm/vessel/internal/game"
+	"github.com/nomfodm/vessel/internal/health"
 	"github.com/nomfodm/vessel/internal/logging"
 	"github.com/nomfodm/vessel/internal/paths"
+	"github.com/nomfodm/vessel/internal/ping"
 	"github.com/nomfodm/vessel/internal/profile"
+	"github.com/nomfodm/vessel/internal/updater"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -89,10 +94,19 @@ func main() {
 		log.Fatalf("init engine: %v", err)
 	}
 
-	profiles := profile.New(s3BaseURL, nil, logger)
+	// One shared transport pools keep-alive connections and reuses TLS sessions
+	// across every HTTP service (storage + auth). ResponseHeaderTimeout bounds a
+	// dead server without capping large file downloads, so per-client Timeout is
+	// only set where the whole exchange is small (auth, health).
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConnsPerHost = 8
+	transport.ResponseHeaderTimeout = 15 * time.Second
+
+	// No total Timeout: profile's client also drives large file downloads.
+	profiles := profile.New(s3BaseURL, &http.Client{Transport: transport}, logger)
 
 	authSvc := auth.New(
-		auth.NewBackend(authBaseURL, nil),
+		auth.NewBackend(authBaseURL, &http.Client{Transport: transport, Timeout: 15 * time.Second}),
 		auth.NewStore(filepath.Join(paths.CacheDir(), "token.enc"), tokenKeyMaterial()),
 		logger,
 	)
@@ -102,6 +116,17 @@ func main() {
 
 	emitter := &wailsEmitter{}
 	gameSvc := game.New(layout, profiles, eng, authSvc, cfg, emitter, logger)
+
+	pingSvc := ping.New(logger)
+
+	// No total Timeout: Apply downloads the whole new binary. ResponseHeaderTimeout
+	// on the shared transport still bounds an unresponsive server.
+	updaterSvc := updater.New(version, authBaseURL, &http.Client{Transport: transport}, emitter, logger)
+
+	healthSvc := health.New([]health.Target{
+		{Name: "Сервер обновлений", URL: s3BaseURL + "index.json", Kind: health.Reachable},
+		{Name: "Сервер авторизации", URL: authBaseURL + "/health", Kind: health.APIHealth},
+	}, &http.Client{Transport: transport, Timeout: 8 * time.Second}, logger)
 
 	app := App{}
 	// Create a new Wails application by providing the necessary options.
@@ -117,6 +142,9 @@ func main() {
 			application.NewService(profiles),
 			application.NewService(authSvc),
 			application.NewService(gameSvc),
+			application.NewService(healthSvc),
+			application.NewService(pingSvc),
+			application.NewService(updaterSvc),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

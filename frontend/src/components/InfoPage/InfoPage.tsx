@@ -1,35 +1,55 @@
 import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
+import { Events } from '@wailsio/runtime'
 import { Logo } from '../Logo/Logo'
 import { Spinner } from '../ui/Spinner/Spinner'
+import { ProgressBar } from '../ui/ProgressBar/ProgressBar'
 import { Icons } from '../Icons/Icons'
-import type { UpdateState } from '../../types'
+import { Service as UpdaterService } from '../../../bindings/github.com/nomfodm/vessel/internal/updater'
 import styles from './InfoPage.module.css'
 
-const ALL_STATES: UpdateState[] = ['check', 'none', 'found', 'updating', 'restart', 'error']
+type CheckState = 'check' | 'none' | 'found' | 'updating' | 'restart' | 'error'
 
 export function InfoPage() {
-  const [us, setUs] = useState<UpdateState>('check')
-  const VERSION = 'v2.1.0'
+  const [state, setState] = useState<CheckState>('check')
+  const [version, setVersion] = useState('')
+  const [latest, setLatest] = useState('')
+  const [changelog, setChangelog] = useState<string[]>([])
+  const [mandatory, setMandatory] = useState(false)
+  const [progress, setProgress] = useState(0)
 
   useEffect(() => {
-    const t = setTimeout(() => setUs('found'), 1300)
-    return () => clearTimeout(t)
+    let cancelled = false
+    UpdaterService.Version().then(v => { if (!cancelled) setVersion(v) }).catch(() => {})
+    UpdaterService.Check()
+      .then(info => {
+        if (cancelled) return
+        setLatest(info.latest)
+        setChangelog(info.changelog ?? [])
+        setMandatory(info.isMandatory)
+        setState(info.needsUpdate ? 'found' : 'none')
+      })
+      .catch(() => { if (!cancelled) setState('error') })
+    return () => { cancelled = true }
   }, [])
 
-  function doUpdate() {
-    setUs('updating')
-    setTimeout(() => {
-      setUs('restart')
-      setTimeout(() => setUs('none'), 1500)
-    }, 2200)
+  useEffect(() => {
+    const off = Events.On('update:progress', (e: { data: { pct: number } }) => setProgress(e.data.pct))
+    return () => { off() }
+  }, [])
+
+  function install() {
+    setState('updating')
+    setProgress(0)
+    UpdaterService.Apply()
+      .then(() => {
+        setState('restart')
+        return UpdaterService.Restart() // process exits; the new binary takes over
+      })
+      .catch(() => setState('error'))
   }
 
-  function cycle() {
-    setUs(prev => ALL_STATES[(ALL_STATES.indexOf(prev) + 1) % ALL_STATES.length])
-  }
-
-  const statusUI: Record<UpdateState, ReactNode> = {
+  const statusUI: Record<CheckState, ReactNode> = {
     check: (
       <div className={styles.statusRow}>
         <Spinner /><span className={styles.statusText}>Проверка обновлений...</span>
@@ -37,20 +57,33 @@ export function InfoPage() {
     ),
     none: (
       <div className={styles.statusRow}>
-        <Icons.Check /><span className={`${styles.statusText} ${styles.green}`}>Обновлений не найдено</span>
+        <Icons.Check /><span className={`${styles.statusText} ${styles.green}`}>Установлена последняя версия</span>
       </div>
     ),
     found: (
       <div className={styles.statusCol}>
         <div className={styles.statusRow}>
-          <Icons.Warn /><span className={`${styles.statusText} ${styles.yellow}`}>Найдены необязательные обновления</span>
+          <Icons.Warn />
+          <span className={`${styles.statusText} ${styles.yellow}`}>
+            Доступна версия {latest}{mandatory && ' · обязательное'}
+          </span>
         </div>
-        <button className={styles.updateLink} onClick={doUpdate}>Обновиться</button>
+        {changelog.length > 0 && (
+          <ul className={styles.changelog}>
+            {changelog.map((c, i) => <li key={i}>{c}</li>)}
+          </ul>
+        )}
+        <button className={styles.updateLink} onClick={install}>Установить обновление</button>
       </div>
     ),
     updating: (
-      <div className={styles.statusRow}>
-        <Spinner /><span className={styles.statusText}>Обновление...</span>
+      <div className={styles.statusCol}>
+        <div className={styles.statusRow}>
+          <Spinner /><span className={styles.statusText}>Загрузка обновления... {progress}%</span>
+        </div>
+        <div className={styles.progressWrap}>
+          <ProgressBar value={progress} />
+        </div>
       </div>
     ),
     restart: (
@@ -60,7 +93,7 @@ export function InfoPage() {
     ),
     error: (
       <div className={styles.statusRow}>
-        <Icons.Err /><span className={`${styles.statusText} ${styles.red}`}>Ошибка при обновлении</span>
+        <Icons.Err /><span className={`${styles.statusText} ${styles.red}`}>Не удалось обновить</span>
       </div>
     ),
   }
@@ -80,10 +113,10 @@ export function InfoPage() {
             <span className={styles.appTitle}>
               Infinity <span className={styles.grad}>Launcher</span>
             </span>
-            <span className={styles.version}>{VERSION}</span>
+            <span className={styles.version}>{version || '…'}</span>
           </div>
 
-          {statusUI[us]}
+          {statusUI[state]}
 
           <div className={styles.techTable}>
             {techInfo.map(([k, v]) => (
@@ -93,8 +126,6 @@ export function InfoPage() {
               </div>
             ))}
           </div>
-
-          <button className={styles.demoBtn} onClick={cycle}>[демо] следующий статус →</button>
         </div>
 
         <div className={styles.right}>

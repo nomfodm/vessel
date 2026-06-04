@@ -1,0 +1,63 @@
+.screen {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  pointer-events: none;
+  animation: boot-in 0.35s ease both;
+}
+
+.closing {
+  animation: boot-out 0.35s ease forwards;
+}
+
+@keyframes boot-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes boot-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.logoWrap {
+  animation: float 3s ease-in-out infinite;
+}
+
+.spinnerRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(37, 195, 232, 0.18);
+  border-top-color: var(--cyan);
+  animation: spin 0.7s linear infinite;
+}
+
+.message {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.2px;
+}
+
+/* Declared locally: CSS-module keyframe scoping makes a reference to the global
+   `spin`/`float` resolve to a non-existent scoped name, so the animation dies. */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}

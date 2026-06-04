@@ -28,15 +28,27 @@ export function Manifest(slug: string): $CancellablePromise<engine$0.Manifest> {
 }
 
 /**
+ * OptionalFiles returns the optional components of a profile for the toggles UI,
+ * summing each id's file sizes.
+ */
+export function OptionalFiles(slug: string): $CancellablePromise<$models.OptionalFile[]> {
+    return $Call.ByID(3978125991, slug).then(($result: any) => {
+        return $$createType2($result);
+    });
+}
+
+/**
  * Profiles returns visible profiles sorted by Order — for the UI list.
  */
 export function Profiles(): $CancellablePromise<$models.Profile[]> {
     return $Call.ByID(2989613254).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType4($result);
     });
 }
 
 // Private type creation functions
 const $$createType0 = engine$0.Manifest.createFrom;
-const $$createType1 = $models.Profile.createFrom;
+const $$createType1 = $models.OptionalFile.createFrom;
 const $$createType2 = $Create.Array($$createType1);
+const $$createType3 = $models.Profile.createFrom;
+const $$createType4 = $Create.Array($$createType3);

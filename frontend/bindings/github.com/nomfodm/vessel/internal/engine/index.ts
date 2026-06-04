@@ -3,7 +3,8 @@
 
 export {
     Manifest,
-    ManifestFile
+    ManifestFile,
+    OptionalGroup
 } from "./models.js";
 
 export type {

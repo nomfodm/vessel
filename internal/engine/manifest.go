@@ -10,10 +10,21 @@ type ManifestFile struct {
 	ID string `json:"id,omitempty"`
 }
 
+// OptionalGroup is presentation metadata for an optional component (one id may
+// span several files). The UI renders one toggle per group; the engine itself
+// only needs ManifestFile.Optional/ID for sync filtering.
+type OptionalGroup struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Desc      string `json:"desc,omitempty"`
+	DefaultOn bool   `json:"defaultOn,omitempty"`
+}
+
 type Manifest struct {
-	Files            []ManifestFile `json:"files"`
-	StrictDirs       []string       `json:"strictDirs"`
-	Runtime          string         `json:"runtime"`
-	RecommendedRAMMB int            `json:"recommendedRamMB"`
-	MinRAMMB         int            `json:"minRamMB"`
+	Files            []ManifestFile  `json:"files"`
+	Optional         []OptionalGroup `json:"optional,omitempty"`
+	StrictDirs       []string        `json:"strictDirs"`
+	Runtime          string          `json:"runtime"`
+	RecommendedRAMMB int             `json:"recommendedRamMB"`
+	MinRAMMB         int             `json:"minRamMB"`
 }

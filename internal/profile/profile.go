@@ -119,6 +119,42 @@ func (s *Service) Manifest(ctx context.Context, slug string) (engine.Manifest, e
 	return m, nil
 }
 
+// OptionalFile is the UI-facing view of an optional component: presentation
+// metadata from the manifest plus the total size of its files.
+type OptionalFile struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Desc      string `json:"desc"`
+	SizeBytes int64  `json:"sizeBytes"`
+	DefaultOn bool   `json:"defaultOn"`
+}
+
+// OptionalFiles returns the optional components of a profile for the toggles UI,
+// summing each id's file sizes.
+func (s *Service) OptionalFiles(ctx context.Context, slug string) ([]OptionalFile, error) {
+	m, err := s.Manifest(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	sizes := make(map[string]int64)
+	for _, f := range m.Files {
+		if f.Optional && f.ID != "" {
+			sizes[f.ID] += f.Size
+		}
+	}
+	out := make([]OptionalFile, 0, len(m.Optional))
+	for _, g := range m.Optional {
+		out = append(out, OptionalFile{
+			ID:        g.ID,
+			Name:      g.Name,
+			Desc:      g.Desc,
+			SizeBytes: sizes[g.ID],
+			DefaultOn: g.DefaultOn,
+		})
+	}
+	return out, nil
+}
+
 func (s *Service) Fetcher() engine.Fetcher {
 	return &httpFetcher{baseURL: s.baseURL, http: s.http}
 }

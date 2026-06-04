@@ -9,6 +9,7 @@ export type Fetcher = any;
 
 export class Manifest {
     "files": ManifestFile[];
+    "optional"?: OptionalGroup[];
     "strictDirs": string[];
     "runtime": string;
     "recommendedRamMB": number;
@@ -40,13 +41,17 @@ export class Manifest {
      */
     static createFrom($$source: any = {}): Manifest {
         const $$createField0_0 = $$createType1;
-        const $$createField1_0 = $$createType2;
+        const $$createField1_0 = $$createType3;
+        const $$createField2_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("files" in $$parsedSource) {
             $$parsedSource["files"] = $$createField0_0($$parsedSource["files"]);
         }
+        if ("optional" in $$parsedSource) {
+            $$parsedSource["optional"] = $$createField1_0($$parsedSource["optional"]);
+        }
         if ("strictDirs" in $$parsedSource) {
-            $$parsedSource["strictDirs"] = $$createField1_0($$parsedSource["strictDirs"]);
+            $$parsedSource["strictDirs"] = $$createField2_0($$parsedSource["strictDirs"]);
         }
         return new Manifest($$parsedSource as Partial<Manifest>);
     }
@@ -91,7 +96,41 @@ export class ManifestFile {
     }
 }
 
+/**
+ * OptionalGroup is presentation metadata for an optional component (one id may
+ * span several files). The UI renders one toggle per group; the engine itself
+ * only needs ManifestFile.Optional/ID for sync filtering.
+ */
+export class OptionalGroup {
+    "id": string;
+    "name": string;
+    "desc"?: string;
+    "defaultOn"?: boolean;
+
+    /** Creates a new OptionalGroup instance. */
+    constructor($$source: Partial<OptionalGroup> = {}) {
+        if (!("id" in $$source)) {
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new OptionalGroup instance from a string or object.
+     */
+    static createFrom($$source: any = {}): OptionalGroup {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new OptionalGroup($$parsedSource as Partial<OptionalGroup>);
+    }
+}
+
 // Private type creation functions
 const $$createType0 = ManifestFile.createFrom;
 const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = $Create.Array($Create.Any);
+const $$createType2 = OptionalGroup.createFrom;
+const $$createType3 = $Create.Array($$createType2);
+const $$createType4 = $Create.Array($Create.Any);

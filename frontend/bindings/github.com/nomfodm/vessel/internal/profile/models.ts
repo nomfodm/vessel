@@ -5,6 +5,47 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
+/**
+ * OptionalFile is the UI-facing view of an optional component: presentation
+ * metadata from the manifest plus the total size of its files.
+ */
+export class OptionalFile {
+    "id": string;
+    "name": string;
+    "desc": string;
+    "sizeBytes": number;
+    "defaultOn": boolean;
+
+    /** Creates a new OptionalFile instance. */
+    constructor($$source: Partial<OptionalFile> = {}) {
+        if (!("id" in $$source)) {
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("desc" in $$source)) {
+            this["desc"] = "";
+        }
+        if (!("sizeBytes" in $$source)) {
+            this["sizeBytes"] = 0;
+        }
+        if (!("defaultOn" in $$source)) {
+            this["defaultOn"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new OptionalFile instance from a string or object.
+     */
+    static createFrom($$source: any = {}): OptionalFile {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new OptionalFile($$parsedSource as Partial<OptionalFile>);
+    }
+}
+
 export class Profile {
     "slug": string;
     "title": string;
