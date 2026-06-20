@@ -4,10 +4,12 @@ import (
 	"context"
 	"embed"
 	_ "embed"
+	"errors"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/user"
 	"path/filepath"
 	"time"
 
@@ -20,6 +22,7 @@ import (
 	"github.com/nomfodm/vessel/internal/paths"
 	"github.com/nomfodm/vessel/internal/ping"
 	"github.com/nomfodm/vessel/internal/profile"
+	"github.com/nomfodm/vessel/internal/system"
 	"github.com/nomfodm/vessel/internal/updater"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -27,9 +30,10 @@ import (
 // Defaults point at the public infrastructure; override at build time via
 // -ldflags "-X main.<name>=...". These are public URLs, not secrets.
 var (
-	version     = "dev"
-	s3BaseURL   = "https://storage.infinityserver.ru/" // index.json, manifests, files/<ab>/<sha>
-	authBaseURL = "https://api.infinityserver.ru"      // auth API
+	version        = "dev"
+	s3BaseURL      = "https://storage.infinityserver.ru/" // index.json, manifests, files/<ab>/<sha>
+	authBaseURL    = "https://api.infinityserver.ru"      // auth API
+	authlibBaseURL = "https://api.infinityserver.ru/v1/launcher" // authlib-injector ALI endpoint
 )
 
 // wailsEmitter adapts the Wails event bus to game.Emitter. The app pointer is
@@ -42,11 +46,35 @@ func (e *wailsEmitter) Emit(event string, data any) {
 	}
 }
 
+// wailsPicker adapts the Wails directory dialog to system.FolderPicker. Like the
+// emitter, its app pointer is set after the application is built.
+type wailsPicker struct{ app *application.App }
+
+func (p *wailsPicker) Pick(title, startDir string) (string, error) {
+	if p.app == nil {
+		return "", errors.New("application not ready")
+	}
+	d := p.app.Dialog.OpenFile().
+		CanChooseDirectories(true).
+		CanChooseFiles(false).
+		CanCreateDirectories(true).
+		SetTitle(title)
+	if startDir != "" {
+		d.SetDirectory(startDir)
+	}
+	return d.PromptForSingleSelection()
+}
+
 // tokenKeyMaterial derives a stable per-machine key for the encrypted token
 // fallback. Not a secret store — just makes a copied file useless elsewhere.
 func tokenKeyMaterial() string {
 	host, _ := os.Hostname()
-	return host + "|" + os.Getenv("USERNAME") + os.Getenv("USER")
+	u, _ := user.Current()
+	username := ""
+	if u != nil {
+		username = u.Username
+	}
+	return host + "|" + username
 }
 
 // Wails uses Go's `embed` package to embed the frontend files into the binary.
@@ -63,6 +91,12 @@ type App struct {
 }
 
 func main() {
+	// Clean up the .old binary left by a previous self-update (Windows can't
+	// delete a running exe, so selfupdate renames it; we remove it on next start).
+	if exe, err := os.Executable(); err == nil {
+		_ = os.Remove(exe + ".old")
+	}
+
 	dev := version == "dev"
 
 	logger, closer, err := logging.New(paths.LogDir(), dev)
@@ -115,9 +149,12 @@ func main() {
 	}
 
 	emitter := &wailsEmitter{}
-	gameSvc := game.New(layout, profiles, eng, authSvc, cfg, emitter, logger)
+	gameSvc := game.New(layout, profiles, eng, authSvc, cfg, emitter, authlibBaseURL, logger)
 
 	pingSvc := ping.New(logger)
+
+	picker := &wailsPicker{}
+	systemSvc := system.New(layout, cfg, picker, logger)
 
 	// No total Timeout: Apply downloads the whole new binary. ResponseHeaderTimeout
 	// on the shared transport still bounds an unresponsive server.
@@ -144,6 +181,7 @@ func main() {
 			application.NewService(gameSvc),
 			application.NewService(healthSvc),
 			application.NewService(pingSvc),
+			application.NewService(systemSvc),
 			application.NewService(updaterSvc),
 		},
 		Assets: application.AssetOptions{
@@ -177,8 +215,10 @@ func main() {
 		URL:              "/",
 	})
 
-	// App now exists: wire it into the emitter so game events reach the frontend.
+	// App now exists: wire it into the emitter and picker, which needed the app
+	// instance that only exists after application.New.
 	emitter.app = app.app
+	picker.app = app.app
 
 	logger.Info("running application")
 	err = app.app.Run()
