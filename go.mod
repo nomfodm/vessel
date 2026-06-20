@@ -1,14 +1,16 @@
 module github.com/nomfodm/vessel
 
-go 1.25
+go 1.25.0
 
 require (
 	github.com/adrg/xdg v0.5.3
 	github.com/dreamscached/minequery/v2 v2.5.0
 	github.com/lmittmann/tint v1.1.3
 	github.com/minio/selfupdate v0.6.0
+	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
 	github.com/wailsapp/wails/v3 v3.0.0-alpha.84
 	github.com/zalando/go-keyring v0.2.6
+	golang.org/x/sync v0.21.0
 )
 
 require (

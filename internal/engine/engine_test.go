@@ -38,7 +38,7 @@ func TestEngineMaterialize(t *testing.T) {
 
 	content := "a mod jar"
 	sha := sha256hex([]byte(content))
-	if err := e.store.Add(strings.NewReader(content), sha); err != nil {
+	if err := e.store.Add(strings.NewReader(content), sha, 0, nil); err != nil {
 		t.Fatalf("store.Add: %v", err)
 	}
 

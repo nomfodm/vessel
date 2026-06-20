@@ -36,6 +36,11 @@ func (copyMaterializer) Materialize(src, dst string) error {
 	}
 	defer in.Close()
 
+	srcInfo, err := in.Stat()
+	if err != nil {
+		return err
+	}
+
 	tmp := dst + ".tmp"
 	out, err := os.Create(tmp)
 	if err != nil {
@@ -47,6 +52,11 @@ func (copyMaterializer) Materialize(src, dst string) error {
 		return err
 	}
 	if err := out.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	// Preserve source permissions (execute bit for java binaries on Linux/macOS).
+	if err := os.Chmod(tmp, srcInfo.Mode()); err != nil {
 		os.Remove(tmp)
 		return err
 	}

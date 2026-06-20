@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/nomfodm/vessel/internal/paths"
+	"golang.org/x/sync/singleflight"
 )
 
 type Engine struct {
@@ -12,6 +13,7 @@ type Engine struct {
 	store  *store
 	mat    Materializer
 	log    *slog.Logger
+	sf     singleflight.Group
 }
 
 func New(layout paths.Layout, log *slog.Logger) (*Engine, error) {
