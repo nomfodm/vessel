@@ -98,12 +98,6 @@ export function InfoPage() {
     ),
   }
 
-  const techInfo: [string, string][] = [
-    ['Движок', 'Wails v3 + React 18'],
-    ['Платформы', 'Windows · macOS · Linux'],
-    ['Протокол', 'Minecraft Auth v3'],
-  ]
-
   return (
     <div className={styles.page}>
       <div className={styles.sectionLabel}>О программе</div>
@@ -117,15 +111,6 @@ export function InfoPage() {
           </div>
 
           {statusUI[state]}
-
-          <div className={styles.techTable}>
-            {techInfo.map(([k, v]) => (
-              <div key={k} className={styles.techRow}>
-                <span className={styles.techKey}>{k}</span>
-                <span className={styles.techVal}>{v}</span>
-              </div>
-            ))}
-          </div>
         </div>
 
         <div className={styles.right}>

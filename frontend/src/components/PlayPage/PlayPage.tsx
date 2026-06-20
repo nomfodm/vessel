@@ -8,11 +8,12 @@ import styles from './PlayPage.module.css'
 
 interface PlayPageProps {
   onSelect: (profile: Profile) => void
+  syncing?: boolean
 }
 
 type Ping = { state: 'pinging' | 'online' | 'offline'; online: number; max: number }
 
-export function PlayPage({ onSelect }: PlayPageProps) {
+export function PlayPage({ onSelect, syncing }: PlayPageProps) {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [pings, setPings] = useState<Record<string, Ping>>({})
   const [loading, setLoading] = useState(true)
@@ -74,9 +75,18 @@ export function PlayPage({ onSelect }: PlayPageProps) {
             <div
               key={p.slug}
               className={styles.card}
-              style={{ background: p.bg }}
-              onClick={() => onSelect(p)}
+              style={{ background: p.bg, opacity: syncing ? 0.5 : 1, cursor: syncing ? 'not-allowed' : 'pointer' }}
+              onClick={() => {
+                if (syncing) return
+                const ping = pings[p.slug]
+                onSelect({
+                  ...p,
+                  status: ping?.state === 'online' ? 'online' : ping?.state === 'offline' ? 'offline' : undefined,
+                  players: ping?.state === 'online' ? { online: ping.online, max: ping.max } : undefined,
+                })
+              }}
               onMouseEnter={e => {
+                if (syncing) return
                 const el = e.currentTarget as HTMLDivElement
                 el.style.transform = 'translateY(-4px)'
                 el.style.boxShadow = `0 20px 50px rgba(0,0,0,0.5), 0 0 0 1px ${p.accent}33`
@@ -91,7 +101,7 @@ export function PlayPage({ onSelect }: PlayPageProps) {
               <div className={styles.cardBody}>
                 <div className={styles.icon}>{p.icon}</div>
                 <div className={styles.cardTitle}>{p.title}</div>
-                <div className={styles.cardDesc}>{p.desc.slice(0, 60)}...</div>
+                <div className={styles.cardDesc}>{p.desc.length > 60 ? p.desc.slice(0, 60) + '…' : p.desc}</div>
                 <div className={styles.badges}>
                   <Badge variant="version">{p.version}</Badge>
                   {p.servers.length > 0 && (() => {

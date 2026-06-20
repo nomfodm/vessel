@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Events } from '@wailsio/runtime'
 import { Icons } from '../Icons/Icons'
 import { Button } from '../ui/Button/Button'
@@ -9,6 +9,7 @@ import { SettingsSub } from './SettingsSub/SettingsSub'
 import { OptFilesSub } from './OptFilesSub/OptFilesSub'
 import { Service as GameService } from '../../../bindings/github.com/nomfodm/vessel/internal/game'
 import { Service as ProfileService } from '../../../bindings/github.com/nomfodm/vessel/internal/profile'
+import { Service as SystemService } from '../../../bindings/github.com/nomfodm/vessel/internal/system'
 import { ConfigService } from '../../../bindings/github.com/nomfodm/vessel/internal/config'
 import type { Profile, OptFile, GameState } from '../../types'
 import styles from './DetailPage.module.css'
@@ -24,15 +25,40 @@ type DetailSub = 'main' | 'settings' | 'optfiles'
 interface DetailPageProps {
   profile: Profile
   onBack: () => void
+  onSyncingChange: (v: boolean) => void
+  syncing?: boolean
 }
 
-export function DetailPage({ profile, onBack }: DetailPageProps) {
+export function DetailPage({ profile, onBack, onSyncingChange, syncing }: DetailPageProps) {
   const [sub, setSub] = useState<DetailSub>('main')
   const [gs, setGs] = useState<GameState>('idle')
-  const [prog, setProg] = useState({ done: 0, total: 100 })
-  const [ram, setRam] = useState(4096)
-  const [path] = useState(`C:\\Users\\Player\\AppData\\Roaming\\.infinity\\${profile.slug}`)
+  const [prog, setProg] = useState({ done: 0, total: 0 })
+  const [launchErr, setLaunchErr] = useState('')
+  const cancelPending = useRef(false)
+  const syncingRef = useRef(false)
+
+  useEffect(() => {
+    return () => { if (syncingRef.current) onSyncingChange(false) }
+  }, [onSyncingChange])
+
+  // Restore state on remount (user navigated away and back during load/play).
+  useEffect(() => {
+    GameService.IsRunning().then(running => {
+      if (running) { setGs('playing'); syncingRef.current = false }
+    }).catch(() => {})
+    if (syncing) { setGs('fetching'); syncingRef.current = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const [ram, setRam] = useState(1024)
+  const [path, setPath] = useState('')
+  const [totalRam, setTotalRam] = useState(8192)
   const [optFiles, setOptFiles] = useState<OptFile[]>([])
+
+  // Real on-disk path and the host's RAM ceiling for the slider.
+  useEffect(() => {
+    SystemService.ProfileDir(profile.slug).then(setPath).catch(() => { /* ignore */ })
+    SystemService.TotalRAMMB().then(mb => { if (mb > 0) setTotalRam(mb) }).catch(() => { /* ignore */ })
+  }, [profile.slug])
 
   // Optional files come from the profile manifest; their on/off state and RAM
   // are overlaid from config.json. A null enabledOptional means "never
@@ -63,32 +89,56 @@ export function DetailPage({ profile, onBack }: DetailPageProps) {
     ConfigService.SetProfileRAM(profile.slug, next).catch(() => { /* ignore */ })
   }
 
+  function openFolder() {
+    SystemService.OpenProfileDir(profile.slug).catch(() => { /* ignore */ })
+  }
+
   // Subscribe to backend game lifecycle events while this page is mounted.
   useEffect(() => {
     const offProgress = Events.On('sync:progress', (e: { data: { done: number; total: number } }) => {
+      if (cancelPending.current) return
       setGs('dl')
       setProg({ done: e.data.done, total: e.data.total })
     })
-    const offStarted = Events.On('game:started', () => setGs('playing'))
+    const offStarted = Events.On('game:started', () => {
+      syncingRef.current = false
+      setGs('playing')
+    })
     const offExited = Events.On('game:exited', () => {
       setGs('idle')
-      setProg({ done: 0, total: 100 })
+      setProg({ done: 0, total: 0 })
     })
     return () => { offProgress(); offStarted(); offExited() }
   }, [])
 
   function startPlay() {
+    cancelPending.current = false
     setGs('fetching')
-    GameService.Launch(profile.slug).catch(() => {
+    setLaunchErr('')
+    syncingRef.current = true
+    onSyncingChange(true)
+    GameService.Launch(profile.slug).catch((e: unknown) => {
+      syncingRef.current = false
+      if (cancelPending.current) {
+        cancelPending.current = false
+        onSyncingChange(false)
+        return
+      }
       setGs('idle')
-      setProg({ done: 0, total: 100 })
+      setProg({ done: 0, total: 0 })
+      setLaunchErr(String(e ?? 'Не удалось запустить игру'))
+      onSyncingChange(false)
     })
   }
 
   function cancel() {
+    cancelPending.current = true
     GameService.Stop().catch(() => { /* ignore */ })
+    setLaunchErr('')
     setGs('idle')
-    setProg({ done: 0, total: 100 })
+    setProg({ done: 0, total: 0 })
+    syncingRef.current = false
+    onSyncingChange(false)
   }
 
   const isIdle = gs === 'idle'
@@ -97,7 +147,7 @@ export function DetailPage({ profile, onBack }: DetailPageProps) {
 
   const statusMsg: Record<GameState, string> = {
     fetching: 'Получаю файлы игры...',
-    dl: `Загрузка ${prog.done} / ${prog.total} МБ`,
+    dl: `Загрузка ${formatSize(prog.done)} / ${formatSize(prog.total)}`,
     prep: 'Подготовка к запуску...',
     playing: 'Игра запущена',
     idle: '',
@@ -164,9 +214,14 @@ export function DetailPage({ profile, onBack }: DetailPageProps) {
                 {statusMsg[gs]}
               </div>
             )}
+            {launchErr && (
+              <div className={styles.launchErr}>
+                <Icons.Err color="#fca5a5" /> {launchErr}
+              </div>
+            )}
             {gs === 'dl' && (
               <div className={styles.progressWrap}>
-                <ProgressBar value={(prog.done / prog.total) * 100} />
+                <ProgressBar value={prog.total ? (prog.done / prog.total) * 100 : 0} />
               </div>
             )}
             <div className={styles.actionButtons}>
@@ -201,7 +256,13 @@ export function DetailPage({ profile, onBack }: DetailPageProps) {
       )}
 
       {sub === 'settings' && (
-        <SettingsSub ram={ram} path={path} onRamChange={handleRamChange} />
+        <SettingsSub
+          ram={ram}
+          path={path}
+          total={totalRam}
+          onRamChange={handleRamChange}
+          onOpen={openFolder}
+        />
       )}
 
       {sub === 'optfiles' && (

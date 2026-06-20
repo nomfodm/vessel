@@ -2,19 +2,22 @@ import { useState, useEffect, useCallback } from 'react'
 import { Events } from '@wailsio/runtime'
 import { Service as AuthService } from '../bindings/github.com/nomfodm/vessel/internal/auth'
 import { Service as HealthService } from '../bindings/github.com/nomfodm/vessel/internal/health'
+import { Service as UpdaterService } from '../bindings/github.com/nomfodm/vessel/internal/updater'
 import { TitleBar } from './components/TitleBar/TitleBar'
 import { TopNav } from './components/TopNav/TopNav'
 import { StarCanvas } from './components/StarCanvas/StarCanvas'
 import { LoginScreen } from './components/LoginScreen/LoginScreen'
 import { ErrorScreen } from './components/ErrorScreen/ErrorScreen'
+import { UpdateScreen } from './components/UpdateScreen/UpdateScreen'
 import { BootScreen } from './components/BootScreen/BootScreen'
 import { PlayPage } from './components/PlayPage/PlayPage'
 import { DetailPage } from './components/DetailPage/DetailPage'
 import { InfoPage } from './components/InfoPage/InfoPage'
+import { SettingsPage } from './components/SettingsPage/SettingsPage'
 import type { Profile, Tab, User } from './types'
 import styles from './App.module.css'
 
-type Phase = 'checking' | 'offline' | 'ready'
+type Phase = 'checking' | 'offline' | 'update-required' | 'ready'
 type ServerStatus = { name: string; ok: boolean; state: string }
 type OfflineReason = 'offline' | 'maintenance' | 'off'
 
@@ -27,6 +30,10 @@ export function App() {
   const [user, setUser] = useState<User | null>(null)
   const [tab, setTab] = useState<Tab>('play')
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null)
+  const [updateLatest, setUpdateLatest] = useState('')
+  const [updateChangelog, setUpdateChangelog] = useState<string[]>([])
+  const [syncing, setSyncing] = useState(false)
+  const [relocating, setRelocating] = useState(false)
 
   useEffect(() => {
     const pause = () => document.documentElement.classList.add('paused')
@@ -36,6 +43,12 @@ export function App() {
     const off3 = Events.On('common:WindowLostFocus', pause)
     const off4 = Events.On('common:WindowFocus', resume)
     return () => { off1(); off2(); off3(); off4() }
+  }, [])
+
+  useEffect(() => {
+    const off1 = Events.On('game:started', () => setSyncing(false))
+    const off2 = Events.On('game:exited', () => setSyncing(false))
+    return () => { off1(); off2() }
   }, [])
 
   // Startup: probe required servers first. Only on success do we touch auth —
@@ -73,13 +86,26 @@ export function App() {
       const ok = live || await AuthService.Restore()
       if (ok) {
         const u = await AuthService.CurrentUser()
-        setUser({ username: u.username })
+        setUser({ username: u.username, avatarUrl: u.avatarUrl || undefined })
       }
     } catch {
       /* no session — show login */
-    } finally {
-      setBooting(false)
     }
+
+    try {
+      const info = await UpdaterService.Check()
+      if (info.needsUpdate && info.isMandatory) {
+        setUpdateLatest(info.latest)
+        setUpdateChangelog(info.changelog ?? [])
+        setBooting(false)
+        setPhase('update-required')
+        return
+      }
+    } catch {
+      /* non-critical — skip silently, user can check in InfoPage */
+    }
+
+    setBooting(false)
   }, [])
 
   useEffect(() => { void startup() }, [startup])
@@ -95,6 +121,7 @@ export function App() {
   }, [loading])
 
   function handleTabChange(newTab: Tab) {
+    if (relocating) return
     setTab(newTab)
     setSelectedProfile(null)
   }
@@ -118,23 +145,35 @@ export function App() {
     )
   }
 
+  if (phase === 'update-required') {
+    return (
+      <div className={styles.app}>
+        <TitleBar />
+        <UpdateScreen latest={updateLatest} changelog={updateChangelog} />
+      </div>
+    )
+  }
+
   return (
     <div className={styles.app}>
       {!loading && <StarCanvas />}
       <TitleBar />
       {!loading && (user ? (
         <>
-          <TopNav tab={tab} setTab={handleTabChange} user={user} onLogout={handleLogout} />
+          <TopNav tab={tab} setTab={handleTabChange} user={user} onLogout={handleLogout} syncing={syncing} locked={relocating} />
           <div className={styles.content}>
-            {tab === 'play' && !selectedProfile && <PlayPage key="play" onSelect={handleSelectProfile} />}
+            {tab === 'play' && !selectedProfile && <PlayPage key="play" onSelect={handleSelectProfile} syncing={syncing} />}
             {tab === 'detail' && selectedProfile && (
               <DetailPage
                 key={`detail-${selectedProfile.slug}`}
                 profile={selectedProfile}
                 onBack={() => { setTab('play'); setSelectedProfile(null) }}
+                onSyncingChange={setSyncing}
+                syncing={syncing}
               />
             )}
             {tab === 'info' && <InfoPage key="info" />}
+            {tab === 'settings' && <SettingsPage key="settings" onRelocatingChange={setRelocating} />}
           </div>
         </>
       ) : (

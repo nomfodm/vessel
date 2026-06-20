@@ -33,7 +33,7 @@ export interface OptFile {
 }
 
 export type GameState = "idle" | "fetching" | "dl" | "prep" | "playing";
-export type Tab = "play" | "info" | "detail";
-export type User = { username: string };
+export type Tab = "play" | "info" | "detail" | "settings";
+export type User = { username: string; avatarUrl?: string };
 export type BadgeVariant = "online" | "offline" | "pinging" | "version";
 export type ButtonVariant = "primary" | "danger" | "ghost" | "icon-sq";

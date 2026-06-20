@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { FormEvent } from 'react'
 import { Logo } from '../Logo/Logo'
 import { Button } from '../ui/Button/Button'
@@ -10,6 +10,7 @@ import type { User } from '../../types'
 import styles from './LoginScreen.module.css'
 import { Browser } from "@wailsio/runtime"
 import { Service as AuthService } from '../../../bindings/github.com/nomfodm/vessel/internal/auth'
+import { Service as UpdaterService } from '../../../bindings/github.com/nomfodm/vessel/internal/updater'
 
 interface LoginScreenProps {
   onLogin: (user: User) => void
@@ -19,6 +20,12 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   const [form, setForm] = useState({ user: '', pass: '' })
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
+  const [version, setVersion] = useState('')
+
+  useEffect(() => {
+    UpdaterService.Version().then(setVersion).catch(() => {})
+  }, [])
+
   async function submit(e: FormEvent) {
     e.preventDefault()
     setErr('')
@@ -29,9 +36,14 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
     try {
       await AuthService.Login(form.user, form.pass)
       const u = await AuthService.CurrentUser()
-      onLogin({ username: u.username })
-    } catch {
-      setErr('Неверный логин или пароль')
+      onLogin({ username: u.username, avatarUrl: u.avatarUrl || undefined })
+    } catch (e: unknown) {
+      const msg = String(e ?? '')
+      if (msg.includes('status 401') || msg.includes('status 403')) {
+        setErr('Неверный логин или пароль')
+      } else {
+        setErr('Не удалось подключиться к серверу')
+      }
     } finally {
       setLoading(false)
     }
@@ -99,7 +111,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           </div>
         </div>
 
-        <div className={styles.version}>Infinity Launcher v2.1.0 · Все права защищены</div>
+        <div className={styles.version}>Infinity Launcher {version} · Все права защищены</div>
       </div>
     </div>
   )
