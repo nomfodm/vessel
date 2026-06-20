@@ -163,7 +163,7 @@ func (s *Service) Restart() error {
 		return err
 	}
 	s.log.Info("restarting into updated binary", "exe", exe)
-	cmd := exec.Command(exe)
+	cmd := exec.Command(exe, os.Args[1:]...)
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -215,12 +215,8 @@ func (p *progressReader) Close() error { return p.rc.Close() }
 
 // platform maps the build OS to the API's Platform value.
 func platform() string {
-	switch runtime.GOOS {
-	case "windows":
-		return "win"
-	case "darwin":
-		return "mac"
-	default:
-		return "linux"
+	if runtime.GOOS == "darwin" {
+		return "macos"
 	}
+	return runtime.GOOS
 }
