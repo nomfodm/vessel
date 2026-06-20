@@ -41,6 +41,7 @@ export class GameSession {
 export class User {
     "uuid": string;
     "username": string;
+    "avatarUrl": string;
 
     /** Creates a new User instance. */
     constructor($$source: Partial<User> = {}) {
@@ -49,6 +50,9 @@ export class User {
         }
         if (!("username" in $$source)) {
             this["username"] = "";
+        }
+        if (!("avatarUrl" in $$source)) {
+            this["avatarUrl"] = "";
         }
 
         Object.assign(this, $$source);

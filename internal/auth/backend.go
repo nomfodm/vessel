@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+// ErrUnauthorized is returned when the server rejects credentials (401/403).
+// Restore uses it to distinguish a genuinely expired refresh token (delete it)
+// from a transient network error (keep it).
+var ErrUnauthorized = fmt.Errorf("unauthorized")
+
 // httpBackend talks to the infinityserver.ru launcher API (base + /v1/...).
 // Endpoint paths and response shapes are isolated here — adjust to the real API
 // without touching Service.
@@ -37,12 +42,17 @@ type tokenPair struct {
 type userMeResponse struct {
 	Username         string `json:"username"`
 	MinecraftProfile struct {
-		UUID     string `json:"uuid"`
-		Nickname string `json:"nickname"`
+		UUID       string `json:"uuid"`
+		Nickname   string `json:"nickname"`
+		ActiveSkin *struct {
+			Texture struct {
+				AvatarURL string `json:"avatar_url"`
+			} `json:"texture"`
+		} `json:"active_skin"`
 	} `json:"minecraft_profile"`
 }
 
-// sessionResponse is POST /v1/launcher/sessions (CreateMinecraftSession).
+// sessionResponse is POST /v1/launcher/session (CreateMinecraftSession).
 type sessionResponse struct {
 	AccessToken string `json:"access_token"`
 	ProfileUUID string `json:"profile_uuid"`
@@ -80,12 +90,16 @@ func (b *httpBackend) me(ctx context.Context, jwt string) (User, error) {
 	if err := b.do(ctx, http.MethodGet, "/v1/user/me", nil, jwt, &m); err != nil {
 		return User{}, err
 	}
-	return User{UUID: m.MinecraftProfile.UUID, Username: m.Username}, nil
+	avatarURL := ""
+	if m.MinecraftProfile.ActiveSkin != nil {
+		avatarURL = m.MinecraftProfile.ActiveSkin.Texture.AvatarURL
+	}
+	return User{UUID: m.MinecraftProfile.UUID, Username: m.Username, AvatarURL: avatarURL}, nil
 }
 
 func (b *httpBackend) IssueGameSession(ctx context.Context, launcherAccessToken string) (GameSession, error) {
 	var s sessionResponse
-	if err := b.do(ctx, http.MethodPost, "/v1/launcher/sessions", nil, launcherAccessToken, &s); err != nil {
+	if err := b.do(ctx, http.MethodPost, "/v1/launcher/session", nil, launcherAccessToken, &s); err != nil {
 		return GameSession{}, err
 	}
 	return GameSession{UUID: s.ProfileUUID, Username: s.Nickname, AccessToken: s.AccessToken}, nil
@@ -120,7 +134,17 @@ func (b *httpBackend) do(ctx context.Context, method, path string, body any, jwt
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("%s %s: status %d", method, path, resp.StatusCode)
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		var msg string
+		if len(bytes.TrimSpace(snippet)) > 0 {
+			msg = fmt.Sprintf("%s %s: status %d: %s", method, path, resp.StatusCode, bytes.TrimSpace(snippet))
+		} else {
+			msg = fmt.Sprintf("%s %s: status %d", method, path, resp.StatusCode)
+		}
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return fmt.Errorf("%s: %w", msg, ErrUnauthorized)
+		}
+		return fmt.Errorf("%s", msg)
 	}
 	if dst == nil {
 		return nil

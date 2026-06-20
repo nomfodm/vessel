@@ -15,8 +15,9 @@ const refreshSkew = 30 * time.Second
 var ErrNotLoggedIn = errors.New("not logged in")
 
 type User struct {
-	UUID     string `json:"uuid"`
-	Username string `json:"username"`
+	UUID      string `json:"uuid"`
+	Username  string `json:"username"`
+	AvatarURL string `json:"avatarUrl"`
 }
 
 // GameSession is what the launcher passes to the game's auth arguments. Its
@@ -104,8 +105,16 @@ func (s *Service) Restore(ctx context.Context) (bool, error) {
 
 	tokens, user, err := s.backend.Refresh(ctx, refresh)
 	if err != nil {
-		s.log.Warn("restore failed, clearing stored token", "err", err)
-		_ = s.store.Delete()
+		if errors.Is(err, ErrUnauthorized) {
+			// Refresh token is genuinely invalid — clear it so the user is prompted
+			// to log in again rather than retrying forever.
+			s.log.Warn("restore failed: token rejected, clearing", "err", err)
+			_ = s.store.Delete()
+		} else {
+			// Transient error (network down, server restarting) — keep the token
+			// so the next launch attempt can try again without forcing re-login.
+			s.log.Warn("restore failed: network error, keeping token", "err", err)
+		}
 		return false, nil
 	}
 

@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -172,7 +173,8 @@ func TestRestoreNothingStored(t *testing.T) {
 func TestRestoreInvalidTokenClears(t *testing.T) {
 	be := &fakeBackend{
 		refreshFn: func(string) (Tokens, User, error) {
-			return Tokens{}, User{}, errors.New("token revoked")
+			// Real backend wraps ErrUnauthorized when server returns 401/403.
+			return Tokens{}, User{}, fmt.Errorf("POST /v1/launcher/auth/refresh: status 401: %w", ErrUnauthorized)
 		},
 	}
 	store := &memStore{val: "bad-ref"}
@@ -184,6 +186,25 @@ func TestRestoreInvalidTokenClears(t *testing.T) {
 	}
 	if store.val != "" {
 		t.Error("invalid token not cleared from store")
+	}
+}
+
+func TestRestoreNetworkErrorKeepsToken(t *testing.T) {
+	be := &fakeBackend{
+		refreshFn: func(string) (Tokens, User, error) {
+			// Network failure — NOT an auth rejection.
+			return Tokens{}, User{}, errors.New("connection refused")
+		},
+	}
+	store := &memStore{val: "good-ref"}
+	s := New(be, store, testLogger())
+
+	ok, err := s.Restore(context.Background())
+	if err != nil || ok {
+		t.Fatalf("Restore = %v, %v; want false, nil", ok, err)
+	}
+	if store.val != "good-ref" {
+		t.Error("token should be preserved on transient network error")
 	}
 }
 
