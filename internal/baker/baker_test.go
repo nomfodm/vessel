@@ -48,7 +48,7 @@ func TestBake(t *testing.T) {
 		},
 	}
 
-	res, err := Bake(nil, client, "survival", out, "files-v1.json", "baker.json", spec)
+	res, err := Bake(nil, client, "profiles/survival", out, "profiles/survival/files-v1.json", "baker.json", spec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,9 +61,14 @@ func TestBake(t *testing.T) {
 		t.Fatalf("NewObjects = %d, want 3 (dedup)", res.NewObjects)
 	}
 
-	// Files sorted by path.
+	// Files sorted by path, each prefixed with profiles/survival.
 	got := res.Manifest.Files
-	wantOrder := []string{"config/options.txt", "dup.txt", "mods/OptiFine_1.0.jar", "mods/core.jar"}
+	wantOrder := []string{
+		"profiles/survival/config/options.txt",
+		"profiles/survival/dup.txt",
+		"profiles/survival/mods/OptiFine_1.0.jar",
+		"profiles/survival/mods/core.jar",
+	}
 	if len(got) != len(wantOrder) {
 		t.Fatalf("got %d files, want %d", len(got), len(wantOrder))
 	}
@@ -73,14 +78,26 @@ func TestBake(t *testing.T) {
 		}
 	}
 
-	// OptiFine flagged optional with id; others not.
+	// OptiFine flagged optional with id; others not. (Glob matched the unprefixed
+	// path, but the stored path is prefixed.)
 	for _, f := range got {
-		if f.Path == "mods/OptiFine_1.0.jar" {
+		if f.Path == "profiles/survival/mods/OptiFine_1.0.jar" {
 			if !f.Optional || f.ID != "optifine" {
 				t.Fatalf("OptiFine optional=%v id=%q, want true/optifine", f.Optional, f.ID)
 			}
 		} else if f.Optional {
 			t.Fatalf("%s unexpectedly optional", f.Path)
+		}
+	}
+
+	// Strict dirs are prefixed too.
+	wantStrict := []string{"profiles/survival/mods", "profiles/survival/config"}
+	if len(res.Manifest.StrictDirs) != len(wantStrict) {
+		t.Fatalf("StrictDirs = %v, want %v", res.Manifest.StrictDirs, wantStrict)
+	}
+	for i, sd := range wantStrict {
+		if res.Manifest.StrictDirs[i] != sd {
+			t.Fatalf("StrictDirs[%d] = %q, want %q", i, res.Manifest.StrictDirs[i], sd)
 		}
 	}
 
@@ -125,16 +142,47 @@ func TestBakeIdempotentDedup(t *testing.T) {
 	out := t.TempDir()
 	write(t, client, "a.txt", "hello")
 
-	if _, err := Bake(nil, client, "p", out, "files-v1.json", "", Spec{}); err != nil {
+	if _, err := Bake(nil, client, "", out, "files-v1.json", "", Spec{}); err != nil {
 		t.Fatal(err)
 	}
 	// Second run sees the object already there -> nothing new written.
-	res, err := Bake(nil, client, "p", out, "files-v1.json", "", Spec{})
+	res, err := Bake(nil, client, "", out, "files-v1.json", "", Spec{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if res.NewObjects != 0 {
 		t.Fatalf("NewObjects = %d on re-bake, want 0", res.NewObjects)
+	}
+}
+
+func TestBakeRuntimePrefix(t *testing.T) {
+	client := t.TempDir()
+	out := t.TempDir()
+	write(t, client, "bin/javaw.exe", "jvm")
+	write(t, client, "lib/rt.jar", "rt")
+
+	res, err := Bake(nil, client, "runtimes/java17", out, "runtimes/java17/win-x64/files-v1.json", "",
+		Spec{StrictDirs: []string{"."}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{"runtimes/java17/bin/javaw.exe", "runtimes/java17/lib/rt.jar"}
+	if len(res.Manifest.Files) != len(want) {
+		t.Fatalf("got %d files, want %d", len(res.Manifest.Files), len(want))
+	}
+	for i, p := range want {
+		if res.Manifest.Files[i].Path != p {
+			t.Fatalf("file[%d].Path = %q, want %q", i, res.Manifest.Files[i].Path, p)
+		}
+	}
+	// "." strict dir resolves to the runtime root.
+	if len(res.Manifest.StrictDirs) != 1 || res.Manifest.StrictDirs[0] != "runtimes/java17" {
+		t.Fatalf("StrictDirs = %v, want [runtimes/java17]", res.Manifest.StrictDirs)
+	}
+	// Manifest landed at the platform-specific path.
+	if _, err := os.Stat(filepath.Join(out, "runtimes", "java17", "win-x64", "files-v1.json")); err != nil {
+		t.Fatalf("runtime manifest missing: %v", err)
 	}
 }
 

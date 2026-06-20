@@ -70,15 +70,21 @@ func LoadSpec(specPath string) (Spec, error) {
 }
 
 // Bake hashes clientDir into outDir/files and writes the manifest to
-// outDir/profiles/<slug>/<manifestName>. specSkip is the spec filename to ignore
-// when it lives inside clientDir.
-func Bake(log *slog.Logger, clientDir, slug, outDir, manifestName, specSkip string, spec Spec) (Result, error) {
+// outDir/<manifestRel>. Every file path (and strict dir) is prefixed with
+// pathPrefix so it materializes at the right place under the launcher's Root —
+// "profiles/<slug>" for a profile, "runtimes/<name>" for a JRE. specSkip is the
+// spec filename to ignore when it lives inside clientDir.
+func Bake(log *slog.Logger, clientDir, pathPrefix, outDir, manifestRel, specSkip string, spec Spec) (Result, error) {
 	if log == nil {
 		log = slog.Default()
 	}
 	log = log.With("cmd", "baker")
 
 	filesDir := filepath.Join(outDir, "files")
+	if err := os.MkdirAll(filesDir, 0o755); err != nil {
+		return Result{}, err
+	}
+
 	var files []engine.ManifestFile
 	var newObjects int
 	var totalBytes int64
@@ -100,27 +106,27 @@ func Bake(log *slog.Logger, clientDir, slug, outDir, manifestName, specSkip stri
 			return nil
 		}
 
-		sha, size, err := hashFile(p)
+		// Single pass: hash while copying so the stored object is guaranteed to
+		// match the SHA written into the manifest (no TOCTOU, no silent corruption).
+		sha, size, wrote, err := hashAndStore(filesDir, p)
 		if err != nil {
-			return fmt.Errorf("hash %s: %w", relSlash, err)
+			return fmt.Errorf("store %s: %w", relSlash, err)
 		}
 
+		// Optional globs are authored relative to clientDir, so match on the
+		// unprefixed path; store the prefixed one.
 		optional, id := matchOptional(relSlash, spec.Optional)
 		if optional {
 			matched[id] = true
 		}
 		files = append(files, engine.ManifestFile{
-			Path:     relSlash,
+			Path:     path.Join(pathPrefix, relSlash),
 			SHA256:   sha,
 			Size:     size,
 			Optional: optional,
 			ID:       id,
 		})
 
-		wrote, err := storeObject(filesDir, sha, p)
-		if err != nil {
-			return fmt.Errorf("store %s: %w", relSlash, err)
-		}
 		if wrote {
 			newObjects++
 			log.Debug("stored object", "sha", sha, "path", relSlash, "optional", optional)
@@ -149,28 +155,99 @@ func Bake(log *slog.Logger, clientDir, slug, outDir, manifestName, specSkip stri
 		groups = append(groups, engine.OptionalGroup{ID: r.ID, Name: name, Desc: r.Desc, DefaultOn: r.DefaultOn})
 	}
 
+	// Strict dirs are authored relative to clientDir too; prefix them so prune
+	// targets the right subtree on disk.
+	strictDirs := make([]string, len(spec.StrictDirs))
+	for i, sd := range spec.StrictDirs {
+		strictDirs[i] = path.Join(pathPrefix, sd)
+	}
+
 	manifest := engine.Manifest{
 		Files:            files,
 		Optional:         groups,
-		StrictDirs:       spec.StrictDirs,
+		StrictDirs:       strictDirs,
 		Runtime:          spec.Runtime,
 		RecommendedRAMMB: spec.RecommendedRamMB,
 		MinRAMMB:         spec.MinRamMB,
 	}
 
-	relManifest := path.Join("profiles", slug, manifestName)
-	if err := writeManifest(filepath.Join(outDir, filepath.FromSlash(relManifest)), manifest); err != nil {
+	if err := writeManifest(filepath.Join(outDir, filepath.FromSlash(manifestRel)), manifest); err != nil {
 		return Result{}, err
 	}
 
-	log.Info("bake done", "slug", slug, "files", len(files), "newObjects", newObjects, "manifest", relManifest)
+	log.Info("bake done", "prefix", pathPrefix, "files", len(files), "newObjects", newObjects, "manifest", manifestRel)
 	return Result{
 		Manifest:     manifest,
 		TotalFiles:   len(files),
 		NewObjects:   newObjects,
 		TotalBytes:   totalBytes,
-		ManifestPath: relManifest,
+		ManifestPath: manifestRel,
 	}, nil
+}
+
+// hashAndStore hashes src while copying it into the CAS at root/<ab>/<sha>.
+// One file read, one write — SHA in the manifest is guaranteed to match the
+// stored bytes. Returns wrote=false when the object already existed (dedup).
+func hashAndStore(root, src string) (sha string, size int64, wrote bool, err error) {
+	in, err := os.Open(src)
+	if err != nil {
+		return "", 0, false, err
+	}
+	defer in.Close()
+
+	// Capture source permissions before any copying so CAS objects on Linux/macOS
+	// preserve the execute bit. Without this, java/javaw ends up 0o600 and
+	// exec.Command fails with EACCES on the first launch.
+	srcInfo, err := in.Stat()
+	if err != nil {
+		return "", 0, false, err
+	}
+	srcMode := srcInfo.Mode()
+
+	tmp, err := os.CreateTemp(root, "tmp-*")
+	if err != nil {
+		return "", 0, false, err
+	}
+	tmpName := tmp.Name()
+	committed := false
+	defer func() {
+		tmp.Close()
+		if !committed {
+			os.Remove(tmpName)
+		}
+	}()
+
+	h := sha256.New()
+	n, err := io.Copy(io.MultiWriter(tmp, h), in)
+	if err != nil {
+		return "", 0, false, err
+	}
+	if err := tmp.Close(); err != nil {
+		return "", 0, false, err
+	}
+
+	sha = hex.EncodeToString(h.Sum(nil))
+	size = n
+	dst := filepath.Join(root, sha[:2], sha)
+
+	if _, serr := os.Stat(dst); serr == nil {
+		// Idempotent: update permissions on objects baked before the fix was added.
+		_ = os.Chmod(dst, srcMode)
+		return sha, size, false, nil // already in CAS — dedup
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return "", 0, false, err
+	}
+	// Apply source permissions before rename so the CAS object has the right mode.
+	// On Windows this is a no-op (only the read-only bit matters there).
+	if err := os.Chmod(tmpName, srcMode); err != nil {
+		return "", 0, false, err
+	}
+	if err := os.Rename(tmpName, dst); err != nil {
+		return "", 0, false, err
+	}
+	committed = true
+	return sha, size, true, nil
 }
 
 func matchOptional(relSlash string, rules []OptionalRule) (bool, string) {
@@ -182,63 +259,6 @@ func matchOptional(relSlash string, rules []OptionalRule) (bool, string) {
 	return false, ""
 }
 
-func hashFile(p string) (string, int64, error) {
-	f, err := os.Open(p)
-	if err != nil {
-		return "", 0, err
-	}
-	defer f.Close()
-	h := sha256.New()
-	n, err := io.Copy(h, f)
-	if err != nil {
-		return "", 0, err
-	}
-	return hex.EncodeToString(h.Sum(nil)), n, nil
-}
-
-// storeObject copies src into the CAS at <root>/<ab>/<sha>, returning false when
-// the object already exists (dedup). The copy is atomic via a temp file rename.
-func storeObject(root, sha, src string) (bool, error) {
-	dst := filepath.Join(root, sha[:2], sha)
-	if _, err := os.Stat(dst); err == nil {
-		return false, nil
-	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return false, err
-	}
-
-	in, err := os.Open(src)
-	if err != nil {
-		return false, err
-	}
-	defer in.Close()
-
-	tmp, err := os.CreateTemp(filepath.Dir(dst), "tmp-*")
-	if err != nil {
-		return false, err
-	}
-	tmpName := tmp.Name()
-	renamed := false
-	defer func() {
-		tmp.Close()
-		if !renamed {
-			os.Remove(tmpName)
-		}
-	}()
-
-	if _, err := io.Copy(tmp, in); err != nil {
-		return false, err
-	}
-	if err := tmp.Close(); err != nil {
-		return false, err
-	}
-	if err := os.Rename(tmpName, dst); err != nil {
-		return false, err
-	}
-	renamed = true
-	return true, nil
-}
-
 func writeManifest(dst string, m engine.Manifest) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
@@ -248,5 +268,27 @@ func writeManifest(dst string, m engine.Manifest) error {
 		return err
 	}
 	data = append(data, '\n')
-	return os.WriteFile(dst, data, 0o644)
+	tmp, err := os.CreateTemp(filepath.Dir(dst), "tmp-manifest-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	committed := false
+	defer func() {
+		tmp.Close()
+		if !committed {
+			os.Remove(tmpName)
+		}
+	}()
+	if _, err := tmp.Write(data); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, dst); err != nil {
+		return err
+	}
+	committed = true
+	return nil
 }
