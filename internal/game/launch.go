@@ -103,10 +103,11 @@ func substitutions(v *Version, p LaunchParams, classpath string) map[string]stri
 		"game_directory":    p.GameDir,
 		"assets_root":       p.AssetsDir,
 		"assets_index_name": v.AssetIndex.ID,
-		"natives_directory": p.NativesDir,
-		"classpath":         classpath,
-		"launcher_name":     "vessel",
-		"launcher_version":  "1",
+		"natives_directory":  p.NativesDir,
+		"classpath":          classpath,
+		"launcher_name":      "infinity",
+		"launcher_version":   "1",
+		"library_directory":  p.LibsDir,
 	}
 }
 

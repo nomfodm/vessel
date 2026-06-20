@@ -51,3 +51,11 @@ func (l Layout) RuntimesDir() string {
 func (l Layout) ProfileDir(slug string) string {
 	return filepath.Join(l.Root, "profiles", slug)
 }
+
+// DataDirs are the subdirectories under Root that hold relocatable game data.
+// Anything else that may live under Root (on Windows the config file and logs
+// share %LOCALAPPDATA%\Infinity) is NOT data and must not be moved — notably the
+// open log file, which can't be renamed on Windows.
+func (l Layout) DataDirs() []string {
+	return []string{"objects", "profiles", "runtimes", ".sync-states"}
+}

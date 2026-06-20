@@ -17,6 +17,10 @@ export function Launch(slug: string): $CancellablePromise<void> {
     return $Call.ByID(4211135650, slug);
 }
 
+/**
+ * Stop aborts whatever the service is doing: it cancels an in-flight launch
+ * (sync/prepare) and kills the game process if one is running.
+ */
 export function Stop(): $CancellablePromise<void> {
     return $Call.ByID(3928339033);
 }
