@@ -12,7 +12,9 @@ import * as $models from "./models.js";
 /**
  * Ping returns the server status. A down or unreachable server yields
  * Status{Online:false} without an error — a normal state the UI renders, not a
- * failure. (ctx is accepted for the Wails binding; minequery uses its own timeout.)
+ * failure. ctx cancellation is honoured: if the caller cancels before minequery's
+ * own timeout fires, Ping returns immediately (the underlying goroutine still
+ * finishes within the configured 5 s timeout).
  */
 export function Ping(host: string, port: number): $CancellablePromise<$models.Status> {
     return $Call.ByID(1850944699, host, port).then(($result: any) => {

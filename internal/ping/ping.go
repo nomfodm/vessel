@@ -35,17 +35,30 @@ func New(log *slog.Logger) *Service {
 
 // Ping returns the server status. A down or unreachable server yields
 // Status{Online:false} without an error — a normal state the UI renders, not a
-// failure. (ctx is accepted for the Wails binding; minequery uses its own timeout.)
+// failure. ctx cancellation is honoured: if the caller cancels before minequery's
+// own timeout fires, Ping returns immediately (the underlying goroutine still
+// finishes within the configured 5 s timeout).
 func (s *Service) Ping(ctx context.Context, host string, port int) Status {
-	res, err := s.pinger.Ping17(host, port)
-	if err != nil {
-		s.log.Debug("ping failed", "host", host, "port", port, "err", err)
+	type result struct{ st Status }
+	ch := make(chan result, 1)
+	go func() {
+		res, err := s.pinger.Ping17(host, port)
+		if err != nil {
+			s.log.Debug("ping failed", "host", host, "port", port, "err", err)
+			ch <- result{Status{Online: false}}
+			return
+		}
+		ch <- result{Status{
+			Online:        true,
+			PlayersOnline: res.OnlinePlayers,
+			PlayersMax:    res.MaxPlayers,
+			Version:       res.VersionName,
+		}}
+	}()
+	select {
+	case r := <-ch:
+		return r.st
+	case <-ctx.Done():
 		return Status{Online: false}
-	}
-	return Status{
-		Online:        true,
-		PlayersOnline: res.OnlinePlayers,
-		PlayersMax:    res.MaxPlayers,
-		Version:       res.VersionName,
 	}
 }
