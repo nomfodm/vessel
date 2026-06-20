@@ -171,7 +171,7 @@ func TestFetcherShardedPath(t *testing.T) {
 	defer srv.Close()
 
 	svc := New(srv.URL, srv.Client(), testLogger())
-	rc, err := svc.Fetcher().Fetch(context.Background(), sha)
+	rc, _, err := svc.Fetcher().Fetch(context.Background(), sha, 0)
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestFetcherDrivesEngineSync(t *testing.T) {
 	if err != nil {
 		t.Fatalf("engine.New: %v", err)
 	}
-	if err := e.Sync(context.Background(), m, nil, svc.Fetcher(), nil); err != nil {
+	if err := e.Sync(context.Background(), m, "test", nil, svc.Fetcher(), nil); err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
 }
@@ -214,7 +214,7 @@ func TestFetchMissingObject(t *testing.T) {
 	srv := s3(map[string]string{})
 	defer srv.Close()
 	svc := New(srv.URL, srv.Client(), testLogger())
-	if _, err := svc.Fetcher().Fetch(context.Background(), sha256hex([]byte("x"))); err == nil {
+	if _, _, err := svc.Fetcher().Fetch(context.Background(), sha256hex([]byte("x")), 0); err == nil {
 		t.Fatal("expected error for missing object")
 	}
 }

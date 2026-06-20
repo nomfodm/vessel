@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -42,6 +43,9 @@ type Profile struct {
 type index struct {
 	Version  int       `json:"version"`
 	Profiles []Profile `json:"profiles"`
+	// Runtimes maps a runtime name (matching Manifest.Runtime) to its per-platform
+	// manifest paths, e.g. "java17" -> {"win-x64": "runtimes/java17/win/files-v1.json"}.
+	Runtimes map[string]map[string]string `json:"runtimes,omitempty"`
 }
 
 type Service struct {
@@ -119,6 +123,51 @@ func (s *Service) Manifest(ctx context.Context, slug string) (engine.Manifest, e
 	return m, nil
 }
 
+// RuntimeManifest resolves the JRE manifest for the given runtime name on the
+// current platform. The runtime is provisioned separately from a profile (its own
+// manifest under runtimes/<name>/<platform>/) so several profiles can share it.
+func (s *Service) RuntimeManifest(ctx context.Context, name string) (engine.Manifest, error) {
+	idx, err := s.fetchIndex(ctx)
+	if err != nil {
+		return engine.Manifest{}, err
+	}
+	builds, ok := idx.Runtimes[name]
+	if !ok {
+		return engine.Manifest{}, fmt.Errorf("runtime %q not declared in index", name)
+	}
+	key := platformKey()
+	manifestPath, ok := builds[key]
+	if !ok {
+		return engine.Manifest{}, fmt.Errorf("runtime %q has no build for platform %s", name, key)
+	}
+
+	var m engine.Manifest
+	if err := s.getJSON(ctx, manifestPath, &m); err != nil {
+		return engine.Manifest{}, err
+	}
+	s.log.Info("runtime manifest loaded", "name", name, "platform", key, "files", len(m.Files))
+	return m, nil
+}
+
+// platformKey is the <os>-<arch> key used in index.json's runtimes map.
+func platformKey() string {
+	osKey := runtime.GOOS
+	switch osKey {
+	case "windows":
+		osKey = "win"
+	case "darwin":
+		osKey = "mac"
+	}
+	archKey := runtime.GOARCH
+	switch archKey {
+	case "amd64":
+		archKey = "x64"
+	case "386":
+		archKey = "x86"
+	}
+	return osKey + "-" + archKey
+}
+
 // OptionalFile is the UI-facing view of an optional component: presentation
 // metadata from the manifest plus the total size of its files.
 type OptionalFile struct {
@@ -185,24 +234,51 @@ type httpFetcher struct {
 	http    *http.Client
 }
 
-func (f *httpFetcher) Fetch(ctx context.Context, sha string) (io.ReadCloser, error) {
+func (f *httpFetcher) Fetch(ctx context.Context, sha string, offset int64) (io.ReadCloser, int64, error) {
+	if len(sha) < 2 {
+		return nil, 0, fmt.Errorf("invalid sha %q", sha)
+	}
 	u, err := joinURL(f.baseURL, "files/"+sha[:2]+"/"+sha)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	if offset > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
 	}
 	resp, err := f.http.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK:
+		// Server ignored Range — stream starts from 0, discard any .part.
+		return resp.Body, 0, nil
+	case http.StatusPartialContent:
+		return resp.Body, offset, nil
+	case http.StatusRequestedRangeNotSatisfiable:
+		// .part file is already complete (offset >= file size) — retry from 0.
 		resp.Body.Close()
-		return nil, fmt.Errorf("fetch %s: status %d", u, resp.StatusCode)
+		req2, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			return nil, 0, err
+		}
+		resp2, err := f.http.Do(req2)
+		if err != nil {
+			return nil, 0, err
+		}
+		if resp2.StatusCode != http.StatusOK {
+			resp2.Body.Close()
+			return nil, 0, fmt.Errorf("fetch %s: status %d", u, resp2.StatusCode)
+		}
+		return resp2.Body, 0, nil
+	default:
+		resp.Body.Close()
+		return nil, 0, fmt.Errorf("fetch %s: status %d", u, resp.StatusCode)
 	}
-	return resp.Body, nil
 }
 
 func joinURL(base, ref string) (string, error) {

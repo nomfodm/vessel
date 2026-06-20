@@ -46,6 +46,17 @@ export function Profiles(): $CancellablePromise<$models.Profile[]> {
     });
 }
 
+/**
+ * RuntimeManifest resolves the JRE manifest for the given runtime name on the
+ * current platform. The runtime is provisioned separately from a profile (its own
+ * manifest under runtimes/<name>/<platform>/) so several profiles can share it.
+ */
+export function RuntimeManifest(name: string): $CancellablePromise<engine$0.Manifest> {
+    return $Call.ByID(3371353165, name).then(($result: any) => {
+        return $$createType0($result);
+    });
+}
+
 // Private type creation functions
 const $$createType0 = engine$0.Manifest.createFrom;
 const $$createType1 = $models.OptionalFile.createFrom;
