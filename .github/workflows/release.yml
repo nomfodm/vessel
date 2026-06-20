@@ -1,0 +1,173 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.parse.outputs.version }}
+      is_mandatory: ${{ steps.parse.outputs.is_mandatory }}
+    steps:
+      - name: Parse tag
+        id: parse
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          if [[ "$TAG" == *-mandatory ]]; then
+            echo "version=${TAG%-mandatory}" >> $GITHUB_OUTPUT
+            echo "is_mandatory=true" >> $GITHUB_OUTPUT
+          else
+            echo "version=$TAG" >> $GITHUB_OUTPUT
+            echo "is_mandatory=false" >> $GITHUB_OUTPUT
+          fi
+
+  create-release:
+    needs: prepare
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+    steps:
+      - name: Create release
+        id: create
+        run: |
+          RESPONSE=$(curl -sf -X POST \
+            -H "Authorization: Bearer ${{ secrets.API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "version": "${{ needs.prepare.outputs.version }}",
+              "changelog": [],
+              "is_mandatory": ${{ needs.prepare.outputs.is_mandatory }}
+            }' \
+            "https://api.infinityserver.ru/v1/launcher/releases")
+          echo "release_id=$(echo "$RESPONSE" | jq -r '.id')" >> $GITHUB_OUTPUT
+
+  build:
+    needs: [prepare, create-release]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            binary: InfinityLauncher.exe
+            ext: .exe
+            cgo: '0'
+          - os: macos-latest
+            platform: macos
+            binary: InfinityLauncher
+            ext: ''
+            cgo: '1'
+          - os: ubuntu-latest
+            platform: linux
+            binary: InfinityLauncher
+            ext: ''
+            cgo: '1'
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install wails3 CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.84
+
+      - name: Install Linux system dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Install mc
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Linux)
+              curl -fsSL https://dl.min.io/client/mc/release/linux-amd64/mc -o /tmp/mc
+              chmod +x /tmp/mc && sudo mv /tmp/mc /usr/local/bin/mc
+              ;;
+            macOS)
+              curl -fsSL https://dl.min.io/client/mc/release/darwin-amd64/mc -o /tmp/mc
+              chmod +x /tmp/mc && sudo mv /tmp/mc /usr/local/bin/mc
+              ;;
+            Windows)
+              mkdir -p "$HOME/bin"
+              curl -fsSL https://dl.min.io/client/mc/release/windows-amd64/mc.exe -o "$HOME/bin/mc.exe"
+              echo "$HOME/bin" >> "$GITHUB_PATH"
+              ;;
+          esac
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm ci && npm run build
+
+      - name: Generate Windows resources
+        if: matrix.os == 'windows-latest'
+        run: |
+          go run ./cmd/geninfo -version ${{ needs.prepare.outputs.version }} -out build/windows/info.json
+          wails3 generate syso -arch amd64 -icon build/windows/icon.ico -manifest build/windows/wails.exe.manifest -info build/windows/info.json -out wails_windows_amd64.syso
+
+      - name: Build
+        env:
+          CGO_ENABLED: ${{ matrix.cgo }}
+          CGO_CFLAGS: ${{ matrix.os == 'macos-latest' && '-mmacosx-version-min=12.0' || '' }}
+          CGO_LDFLAGS: ${{ matrix.os == 'macos-latest' && '-mmacosx-version-min=12.0' || '' }}
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.os == 'macos-latest' && '12.0' || '' }}
+        run: >
+          go build
+          -tags production
+          -trimpath
+          -buildvcs=false
+          -ldflags="-w -s ${{ matrix.os == 'windows-latest' && '-H windowsgui' || '' }} -X main.version=${{ needs.prepare.outputs.version }}"
+          -o bin/${{ matrix.binary }}
+
+      - name: Compute SHA256
+        id: sha
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            HASH=$(powershell -Command "(Get-FileHash bin/${{ matrix.binary }} -Algorithm SHA256).Hash.ToLower()")
+          else
+            HASH=$(sha256sum bin/${{ matrix.binary }} | cut -d' ' -f1)
+          fi
+          echo "value=$HASH" >> $GITHUB_OUTPUT
+
+      - name: Compute file size
+        id: size
+        shell: bash
+        run: echo "value=$(wc -c < bin/${{ matrix.binary }} | tr -d ' ')" >> $GITHUB_OUTPUT
+
+      - name: Upload to S3
+        shell: bash
+        env:
+          MC_HOST_storage: "https://${{ secrets.S3_ACCESS_KEY }}:${{ secrets.S3_SECRET_KEY }}@${{ secrets.S3_ENDPOINT }}"
+        run: |
+          mc cp \
+            bin/${{ matrix.binary }} \
+            storage/launcher/${{ needs.prepare.outputs.version }}/${{ matrix.platform }}/${{ steps.sha.outputs.value }}${{ matrix.ext }}
+
+      - name: Add release asset
+        shell: bash
+        run: |
+          curl -sf -X POST \
+            -H "Authorization: Bearer ${{ secrets.API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"platform\": \"${{ matrix.platform }}\",
+              \"download_url\": \"https://storage.infinityserver.ru/launcher/${{ needs.prepare.outputs.version }}/${{ matrix.platform }}/${{ steps.sha.outputs.value }}${{ matrix.ext }}\",
+              \"checksum\": \"${{ steps.sha.outputs.value }}\",
+              \"file_size\": ${{ steps.size.outputs.value }}
+            }" \
+            "https://api.infinityserver.ru/v1/launcher/releases/${{ needs.create-release.outputs.release_id }}/assets"

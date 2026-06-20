@@ -45,6 +45,7 @@ tasks:
       - task: generate:syso
         vars:
           ARCH: '{{.ARCH}}'
+          VERSION: '{{.VERSION}}'
       - go build {{.BUILD_FLAGS}} -o "{{.BIN_DIR}}/{{.APP_NAME}}.exe"
       - cmd: powershell Remove-item *.syso
         platforms: [windows]
@@ -105,13 +106,26 @@ tasks:
     vars:
       FORMAT: '{{.FORMAT | default "nsis"}}'
 
+  generate:info-json:
+    summary: Writes info.json from template, injecting VERSION into PE metadata
+    internal: true
+    vars:
+      VERSION: '{{.VERSION | default "0.0.0"}}'
+    cmds:
+      - go run ./cmd/geninfo -version {{.VERSION}} -out build/windows/info.json
+
   generate:syso:
     summary: Generates Windows `.syso` file
     dir: build
+    deps:
+      - task: generate:info-json
+        vars:
+          VERSION: '{{.VERSION}}'
     cmds:
       - wails3 generate syso -arch {{.ARCH}} -icon windows/icon.ico -manifest windows/wails.exe.manifest -info windows/info.json -out ../wails_windows_{{.ARCH}}.syso
     vars:
       ARCH: '{{.ARCH | default ARCH}}'
+      VERSION: '{{.VERSION | default "0.0.0"}}'
 
   create:nsis:installer:
     summary: Creates an NSIS installer
