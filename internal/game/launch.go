@@ -63,6 +63,7 @@ func BuildCommand(v *Version, p LaunchParams, env Env) []string {
 }
 
 func buildClasspath(v *Version, p LaunchParams, env Env) string {
+	seen := make(map[string]bool)
 	var parts []string
 	for _, lib := range v.Libraries {
 		if !rulesAllow(lib.Rules, env) {
@@ -75,7 +76,12 @@ func buildClasspath(v *Version, p LaunchParams, env Env) string {
 		if rel == "" {
 			continue
 		}
-		parts = append(parts, filepath.Join(p.LibsDir, filepath.FromSlash(rel)))
+		abs := filepath.Join(p.LibsDir, filepath.FromSlash(rel))
+		if seen[abs] {
+			continue
+		}
+		seen[abs] = true
+		parts = append(parts, abs)
 	}
 	parts = append(parts, p.ClientJar)
 	return strings.Join(parts, string(classpathSeparator(env)))

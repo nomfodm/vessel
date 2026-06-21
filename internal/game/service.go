@@ -160,6 +160,7 @@ func (s *Service) Launch(ctx context.Context, slug string) error {
 // pump streams the process output as game:log and emits game:exited on exit.
 func (s *Service) pump(slug string, proc *process) {
 	for line := range proc.Lines() {
+		s.log.Debug("game output", "slug", slug, "line", line)
 		s.emit.Emit("game:log", map[string]any{"line": line})
 	}
 	exitCode := proc.Wait()
