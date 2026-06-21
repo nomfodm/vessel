@@ -15,23 +15,33 @@ on:
           - linux
 
 jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.value }}
+    steps:
+      - id: matrix
+        shell: bash
+        run: |
+          ALL='{"include":[
+            {"os":"windows-latest","platform":"windows","binary":"infinitylauncher.exe"},
+            {"os":"macos-latest","platform":"darwin","binary":"infinitylauncher"},
+            {"os":"ubuntu-latest","platform":"linux","binary":"infinitylauncher"}
+          ]}'
+          case "${{ inputs.os }}" in
+            windows) echo 'value={"include":[{"os":"windows-latest","platform":"windows","binary":"infinitylauncher.exe"}]}' >> $GITHUB_OUTPUT ;;
+            macos)   echo 'value={"include":[{"os":"macos-latest","platform":"darwin","binary":"infinitylauncher"}]}' >> $GITHUB_OUTPUT ;;
+            linux)   echo 'value={"include":[{"os":"ubuntu-latest","platform":"linux","binary":"infinitylauncher"}]}' >> $GITHUB_OUTPUT ;;
+            *)       echo "value=$ALL" >> $GITHUB_OUTPUT ;;
+          esac
+
   build:
+    needs: setup
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            platform: windows
-            binary: InfinityLauncher.exe
-          - os: macos-latest
-            platform: darwin
-            binary: InfinityLauncher
-          - os: ubuntu-latest
-            platform: linux
-            binary: InfinityLauncher
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
 
     runs-on: ${{ matrix.os }}
-    if: inputs.os == 'all' || inputs.os == matrix.platform
 
     steps:
       - uses: actions/checkout@v4
