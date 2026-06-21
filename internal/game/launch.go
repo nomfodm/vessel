@@ -30,7 +30,7 @@ type LaunchParams struct {
 // function — no process is started, so it is fully testable.
 func BuildCommand(v *Version, p LaunchParams, env Env) []string {
 	classpath := buildClasspath(v, p, env)
-	subst := substitutions(v, p, classpath)
+	subst := substitutions(v, p, classpath, env)
 
 	argv := []string{p.JavaPath}
 
@@ -88,26 +88,27 @@ func classpathSeparator(env Env) rune {
 	return ':'
 }
 
-func substitutions(v *Version, p LaunchParams, classpath string) map[string]string {
+func substitutions(v *Version, p LaunchParams, classpath string, env Env) map[string]string {
 	userType := p.UserType
 	if userType == "" {
 		userType = "msa"
 	}
 	return map[string]string{
-		"auth_player_name":  p.PlayerName,
-		"auth_uuid":         p.UUID,
-		"auth_access_token": p.AccessToken,
-		"user_type":         userType,
-		"version_name":      p.VersionName,
-		"version_type":      v.Type,
-		"game_directory":    p.GameDir,
-		"assets_root":       p.AssetsDir,
-		"assets_index_name": v.AssetIndex.ID,
-		"natives_directory":  p.NativesDir,
-		"classpath":          classpath,
-		"launcher_name":      "infinity",
-		"launcher_version":   "1",
-		"library_directory":  p.LibsDir,
+		"auth_player_name":    p.PlayerName,
+		"auth_uuid":           p.UUID,
+		"auth_access_token":   p.AccessToken,
+		"user_type":           userType,
+		"version_name":        p.VersionName,
+		"version_type":        v.Type,
+		"game_directory":      p.GameDir,
+		"assets_root":         p.AssetsDir,
+		"assets_index_name":   v.AssetIndex.ID,
+		"natives_directory":   p.NativesDir,
+		"classpath":           classpath,
+		"launcher_name":       "infinity",
+		"launcher_version":    "1",
+		"library_directory":   p.LibsDir,
+		"classpath_separator": string(classpathSeparator(env)),
 	}
 }
 
@@ -124,13 +125,23 @@ func expandArgs(args []Argument, env Env, subst map[string]string) []string {
 	return out
 }
 
-// applySubst replaces ${key} placeholders. Unknown placeholders are left intact.
+// applySubst replaces ${key} placeholders. Unknown placeholders are stripped.
 func applySubst(s string, subst map[string]string) string {
 	if !strings.Contains(s, "${") {
 		return s
 	}
 	for k, v := range subst {
 		s = strings.ReplaceAll(s, "${"+k+"}", v)
+	}
+	// Strip any remaining unknown placeholders so any modloader works without
+	// requiring launcher-specific handling for every new variable.
+	for strings.Contains(s, "${") {
+		start := strings.Index(s, "${")
+		end := strings.Index(s[start:], "}")
+		if end == -1 {
+			break
+		}
+		s = s[:start] + s[start+end+1:]
 	}
 	return s
 }

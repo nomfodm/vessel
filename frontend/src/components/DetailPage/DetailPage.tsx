@@ -146,7 +146,7 @@ export function DetailPage({ profile, onBack, onSyncingChange, syncing }: Detail
   const isPlaying = gs === 'playing'
 
   const statusMsg: Record<GameState, string> = {
-    fetching: 'Получаю файлы игры...',
+    fetching: 'Проверка файлов...',
     dl: `Загрузка ${formatSize(prog.done)} / ${formatSize(prog.total)}`,
     prep: 'Подготовка к запуску...',
     playing: 'Игра запущена',
