@@ -2,7 +2,20 @@ name: Release
 
 on:
   push:
-    tags: ['v*']
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (X.Y.Z, without v)'
+        required: true
+      is_mandatory:
+        description: 'Mandatory update'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 jobs:
   prepare:
@@ -14,13 +27,18 @@ jobs:
       - name: Parse tag
         id: parse
         run: |
-          TAG="${GITHUB_REF#refs/tags/v}"
-          if [[ "$TAG" == *-mandatory ]]; then
-            echo "version=${TAG%-mandatory}" >> $GITHUB_OUTPUT
-            echo "is_mandatory=true" >> $GITHUB_OUTPUT
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+            echo "is_mandatory=${{ inputs.is_mandatory }}" >> $GITHUB_OUTPUT
           else
-            echo "version=$TAG" >> $GITHUB_OUTPUT
-            echo "is_mandatory=false" >> $GITHUB_OUTPUT
+            TAG="${GITHUB_REF#refs/tags/v}"
+            if [[ "$TAG" == *-mandatory ]]; then
+              echo "version=${TAG%-mandatory}" >> $GITHUB_OUTPUT
+              echo "is_mandatory=true" >> $GITHUB_OUTPUT
+            else
+              echo "version=$TAG" >> $GITHUB_OUTPUT
+              echo "is_mandatory=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
   create-release:
@@ -51,19 +69,16 @@ jobs:
         include:
           - os: windows-latest
             platform: windows
-            binary: InfinityLauncher.exe
+            binary: infinitylauncher.exe
             ext: .exe
-            cgo: '0'
           - os: macos-latest
             platform: macos
-            binary: InfinityLauncher
-            ext: ''
-            cgo: '1'
+            binary: infinitylauncher
+            ext: ""
           - os: ubuntu-latest
             platform: linux
-            binary: InfinityLauncher
-            ext: ''
-            cgo: '1'
+            binary: infinitylauncher
+            ext: ""
 
     runs-on: ${{ matrix.os }}
 
@@ -77,7 +92,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -109,29 +124,8 @@ jobs:
               ;;
           esac
 
-      - name: Build frontend
-        working-directory: frontend
-        run: npm ci && npm run build
-
-      - name: Generate Windows resources
-        if: matrix.os == 'windows-latest'
-        run: |
-          go run ./cmd/geninfo -version ${{ needs.prepare.outputs.version }} -out build/windows/info.json
-          wails3 generate syso -arch amd64 -icon build/windows/icon.ico -manifest build/windows/wails.exe.manifest -info build/windows/info.json -out wails_windows_amd64.syso
-
       - name: Build
-        env:
-          CGO_ENABLED: ${{ matrix.cgo }}
-          CGO_CFLAGS: ${{ matrix.os == 'macos-latest' && '-mmacosx-version-min=12.0' || '' }}
-          CGO_LDFLAGS: ${{ matrix.os == 'macos-latest' && '-mmacosx-version-min=12.0' || '' }}
-          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.os == 'macos-latest' && '12.0' || '' }}
-        run: >
-          go build
-          -tags production
-          -trimpath
-          -buildvcs=false
-          -ldflags="-w -s ${{ matrix.os == 'windows-latest' && '-H windowsgui' || '' }} -X main.version=${{ needs.prepare.outputs.version }}"
-          -o bin/${{ matrix.binary }}
+        run: wails3 build VERSION=${{ needs.prepare.outputs.version }} APP_NAME=infinitylauncher
 
       - name: Compute SHA256
         id: sha
@@ -156,7 +150,7 @@ jobs:
         run: |
           mc cp \
             bin/${{ matrix.binary }} \
-            storage/launcher/${{ needs.prepare.outputs.version }}/${{ matrix.platform }}/${{ steps.sha.outputs.value }}${{ matrix.ext }}
+            storage/launcher/${{ needs.prepare.outputs.version }}/${{ matrix.platform }}/${{ matrix.binary }}
 
       - name: Add release asset
         shell: bash
@@ -166,7 +160,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{
               \"platform\": \"${{ matrix.platform }}\",
-              \"download_url\": \"https://storage.infinityserver.ru/launcher/${{ needs.prepare.outputs.version }}/${{ matrix.platform }}/${{ steps.sha.outputs.value }}${{ matrix.ext }}\",
+              \"download_url\": \"https://storage.infinityserver.ru/launcher/${{ needs.prepare.outputs.version }}/${{ matrix.platform }}/${{ matrix.binary }}\",
               \"checksum\": \"${{ steps.sha.outputs.value }}\",
               \"file_size\": ${{ steps.size.outputs.value }}
             }" \
