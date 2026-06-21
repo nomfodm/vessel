@@ -150,7 +150,7 @@ jobs:
         run: |
           mc cp \
             bin/${{ matrix.binary }} \
-            storage/launcher/${{ needs.prepare.outputs.version }}/${{ matrix.platform }}/${{ matrix.binary }}
+            storage/infinity/launcher/${{ needs.prepare.outputs.version }}/${{ matrix.platform }}/${{ matrix.binary }}
 
       - name: Add release asset
         shell: bash
