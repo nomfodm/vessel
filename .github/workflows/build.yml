@@ -23,16 +23,11 @@ jobs:
       - id: matrix
         shell: bash
         run: |
-          ALL='{"include":[
-            {"os":"windows-latest","platform":"windows","binary":"infinitylauncher.exe"},
-            {"os":"macos-latest","platform":"darwin","binary":"infinitylauncher"},
-            {"os":"ubuntu-latest","platform":"linux","binary":"infinitylauncher"}
-          ]}'
           case "${{ inputs.os }}" in
             windows) echo 'value={"include":[{"os":"windows-latest","platform":"windows","binary":"infinitylauncher.exe"}]}' >> $GITHUB_OUTPUT ;;
             macos)   echo 'value={"include":[{"os":"macos-latest","platform":"darwin","binary":"infinitylauncher"}]}' >> $GITHUB_OUTPUT ;;
             linux)   echo 'value={"include":[{"os":"ubuntu-latest","platform":"linux","binary":"infinitylauncher"}]}' >> $GITHUB_OUTPUT ;;
-            *)       echo "value=$ALL" >> $GITHUB_OUTPUT ;;
+            *)       echo 'value={"include":[{"os":"windows-latest","platform":"windows","binary":"infinitylauncher.exe"},{"os":"macos-latest","platform":"darwin","binary":"infinitylauncher"},{"os":"ubuntu-latest","platform":"linux","binary":"infinitylauncher"}]}' >> $GITHUB_OUTPUT ;;
           esac
 
   build:
