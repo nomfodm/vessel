@@ -29,3 +29,4 @@
 ```
 
 **Stack:** Go · Wails v3 · React · TypeScript · Vite · CSS Modules
+8706983cae1547d8b77b7f26af19588b
