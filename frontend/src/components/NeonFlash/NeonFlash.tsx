@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Events } from '@wailsio/runtime'
+import styles from './NeonFlash.module.css'
 
 // Launcher palette (cyan/violet/indigo) pushed into bolder neons: fuchsia,
 // magenta, hot pink, electric blue — "дерзкие" but still on-brand.
@@ -112,7 +113,7 @@ export function NeonFlash() {
   return (
     <canvas
       ref={canvasRef}
-      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 0, pointerEvents: 'none' }}
+      className={styles.canvas}
     />
   )
 }

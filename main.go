@@ -161,7 +161,7 @@ func main() {
 	updaterSvc := updater.New(version, authBaseURL, &http.Client{Transport: transport}, emitter, logger)
 
 	healthSvc := health.New([]health.Target{
-		{Name: "Сервер обновлений", URL: s3BaseURL + "index.json", Kind: health.Reachable},
+		{Name: "Сервер обновлений", URL: s3BaseURL + "index.json", Kind: health.Reachable2xx},
 		{Name: "Сервер авторизации", URL: authBaseURL + "/health", Kind: health.APIHealth},
 	}, &http.Client{Transport: transport, Timeout: 8 * time.Second}, logger)
 

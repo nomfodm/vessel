@@ -16,6 +16,9 @@ const (
 	// Reachable: up when the HTTP roundtrip returns a status below 500. A 4xx
 	// still proves the host is alive — only transport failures and 5xx are down.
 	Reachable Kind = "reachable"
+	// Reachable2xx: up only when the HTTP roundtrip returns a 2xx status.
+	// Use for object-storage endpoints where 403/404 means the service is broken.
+	Reachable2xx Kind = "reachable2xx"
 	// APIHealth: GET the URL and read {"status": "..."} — only "operational"
 	// counts as up; "maintenance"/"off" are reported distinctly.
 	APIHealth Kind = "apiHealth"
@@ -86,10 +89,14 @@ func (s *Service) Check(ctx context.Context) Report {
 }
 
 func (s *Service) probe(ctx context.Context, t Target) Status {
-	if t.Kind == APIHealth {
+	switch t.Kind {
+	case APIHealth:
 		return s.probeAPIHealth(ctx, t)
+	case Reachable2xx:
+		return s.probeReachable2xx(ctx, t)
+	default:
+		return s.probeReachable(ctx, t)
 	}
-	return s.probeReachable(ctx, t)
 }
 
 func (s *Service) probeReachable(ctx context.Context, t Target) Status {
@@ -101,6 +108,23 @@ func (s *Service) probeReachable(ctx context.Context, t Target) Status {
 	}
 	resp.Body.Close()
 	if resp.StatusCode >= 500 {
+		s.log.Warn("target unhealthy", "target", t.Name, "status", resp.StatusCode)
+		return st
+	}
+	st.OK = true
+	st.State = "operational"
+	return st
+}
+
+func (s *Service) probeReachable2xx(ctx context.Context, t Target) Status {
+	st := Status{Name: t.Name, State: "unreachable"}
+	resp, err := s.do(ctx, t.URL)
+	if err != nil {
+		s.log.Warn("target unreachable", "target", t.Name, "url", t.URL, "err", err)
+		return st
+	}
+	resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		s.log.Warn("target unhealthy", "target", t.Name, "status", resp.StatusCode)
 		return st
 	}
