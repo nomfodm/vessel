@@ -105,20 +105,21 @@ jobs:
       - name: Install wails3 CLI
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.84
 
-      - name: Setup AWS CLI
+      - name: Install AWS CLI
         shell: bash
         run: |
-          if ! command -v aws &> /dev/null; then
-            echo "Installing AWS CLI..."
-            if [[ "$RUNNER_OS" == "Windows" ]]; then
-              msiexec.exe /i https://awscli.amazonaws.com/AWSCLIV2.msi /quiet
-              echo "C:\Program Files\Amazon\AWSCLIV2\" >> $GITHUB_PATH
-            elif [[ "$RUNNER_OS" == "macOS" ]]; then
-              brew install awscli
-            else
+          case "$RUNNER_OS" in
+            Linux)
               sudo apt-get update && sudo apt-get install -y awscli
-            fi
-          fi
+              ;;
+            macOS)
+              brew install awscli
+              ;;
+            Windows)
+              winget install --id Amazon.AWSCLI -e --silent --accept-source-agreements --accept-package-agreements
+              echo "C:\Program Files\Amazon\AWSCLIV2" >> $GITHUB_PATH
+              ;;
+          esac
 
       - name: Build
         run: wails3 build VERSION=${{ needs.prepare.outputs.version }} APP_NAME=infinitylauncher
