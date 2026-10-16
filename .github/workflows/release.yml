@@ -110,7 +110,9 @@ jobs:
         run: |
           case "$RUNNER_OS" in
             Linux)
-              sudo apt-get update && sudo apt-get install -y awscli
+              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+              unzip -q awscliv2.zip
+              sudo ./aws/install
               ;;
             macOS)
               brew install awscli
@@ -150,7 +152,8 @@ jobs:
           aws s3 cp \
             bin/${{ matrix.binary }} \
             s3://infinity/launcher/${{ needs.prepare.outputs.version }}/${{ matrix.platform }}/${{ matrix.binary }} \
-            --endpoint-url https://${{ secrets.S3_ENDPOINT }}
+            --endpoint-url https://${{ secrets.S3_ENDPOINT }} \
+            --no-verify-ssl
 
       - name: Add release asset
         shell: bash
