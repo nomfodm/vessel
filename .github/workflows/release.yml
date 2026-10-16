@@ -105,24 +105,20 @@ jobs:
       - name: Install wails3 CLI
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.84
 
-      - name: Install mc
+      - name: Setup AWS CLI
         shell: bash
         run: |
-          case "$RUNNER_OS" in
-            Linux)
-              curl -fsSL https://dl.min.io/client/mc/release/linux-amd64/mc -o /tmp/mc
-              chmod +x /tmp/mc && sudo mv /tmp/mc /usr/local/bin/mc
-              ;;
-            macOS)
-              curl -fsSL https://dl.min.io/client/mc/release/darwin-amd64/mc -o /tmp/mc
-              chmod +x /tmp/mc && sudo mv /tmp/mc /usr/local/bin/mc
-              ;;
-            Windows)
-              mkdir -p "$HOME/bin"
-              curl -fsSL https://dl.min.io/client/mc/release/windows-amd64/mc.exe -o "$HOME/bin/mc.exe"
-              echo "$HOME/bin" >> "$GITHUB_PATH"
-              ;;
-          esac
+          if ! command -v aws &> /dev/null; then
+            echo "Installing AWS CLI..."
+            if [[ "$RUNNER_OS" == "Windows" ]]; then
+              msiexec.exe /i https://awscli.amazonaws.com/AWSCLIV2.msi /quiet
+              echo "C:\Program Files\Amazon\AWSCLIV2\" >> $GITHUB_PATH
+            elif [[ "$RUNNER_OS" == "macOS" ]]; then
+              brew install awscli
+            else
+              sudo apt-get update && sudo apt-get install -y awscli
+            fi
+          fi
 
       - name: Build
         run: wails3 build VERSION=${{ needs.prepare.outputs.version }} APP_NAME=infinitylauncher
@@ -146,11 +142,14 @@ jobs:
       - name: Upload to S3
         shell: bash
         env:
-          MC_HOST_storage: "https://${{ secrets.S3_ACCESS_KEY }}:${{ secrets.S3_SECRET_KEY }}@${{ secrets.S3_ENDPOINT }}"
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_KEY }}
+          AWS_DEFAULT_REGION: "ru-1"
         run: |
-          mc cp \
+          aws s3 cp \
             bin/${{ matrix.binary }} \
-            storage/infinity/launcher/${{ needs.prepare.outputs.version }}/${{ matrix.platform }}/${{ matrix.binary }}
+            s3://infinity/launcher/${{ needs.prepare.outputs.version }}/${{ matrix.platform }}/${{ matrix.binary }} \
+            --endpoint-url https://${{ secrets.S3_ENDPOINT }}
 
       - name: Add release asset
         shell: bash
